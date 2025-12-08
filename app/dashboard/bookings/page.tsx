@@ -213,7 +213,6 @@ export default async function BookingsPage({
                 <TableHead>Services</TableHead>
                 <TableHead>Staff</TableHead>
                 <TableHead>Branch</TableHead>
-                <TableHead>Amount</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -251,11 +250,6 @@ export default async function BookingsPage({
                       ))}
                     </TableCell>
                     <TableCell>{booking.branch?.name || '-'}</TableCell>
-                    <TableCell className="font-medium">
-                      {formatCurrency(
-                        booking.booking_items?.reduce((sum: number, item: any) => sum + (item.price || 0), 0) || 0
-                      )}
-                    </TableCell>
                     <TableCell>
                       <span
                         className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
@@ -276,7 +270,7 @@ export default async function BookingsPage({
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No bookings found. Create your first booking to get started.
                   </TableCell>
                 </TableRow>

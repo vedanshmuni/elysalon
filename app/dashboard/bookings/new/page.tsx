@@ -40,7 +40,7 @@ interface Branch {
 interface BookingItem {
   service_id: string;
   staff_id: string;
-  price: number;
+  duration_minutes?: number;
 }
 
 export default function NewBookingPage() {
@@ -61,8 +61,15 @@ export default function NewBookingPage() {
     status: 'PENDING',
   });
 
+  const [walkInClient, setWalkInClient] = useState({
+    full_name: '',
+    phone: '',
+    email: '',
+    gender: '',
+  });
+
   const [bookingItems, setBookingItems] = useState<BookingItem[]>([
-    { service_id: '', staff_id: '', price: 0 },
+    { service_id: '', staff_id: '' },
   ]);
 
   useEffect(() => {
@@ -128,7 +135,7 @@ export default function NewBookingPage() {
   }
 
   function addBookingItem() {
-    setBookingItems([...bookingItems, { service_id: '', staff_id: '', price: 0 }]);
+    setBookingItems([...bookingItems, { service_id: '', staff_id: '' }]);
   }
 
   function removeBookingItem(index: number) {
@@ -140,11 +147,11 @@ export default function NewBookingPage() {
     const updated = [...bookingItems];
     updated[index] = { ...updated[index], [field]: value };
 
-    // Auto-fill price when service is selected
+    // Store duration when service is selected
     if (field === 'service_id') {
       const service = services.find((s) => s.id === value);
       if (service) {
-        updated[index].price = service.base_price;
+        updated[index].duration_minutes = service.duration_minutes;
       }
     }
 
@@ -171,6 +178,31 @@ export default function NewBookingPage() {
         return;
       }
 
+      // If walk-in customer, create client first
+      let clientId = formData.client_id;
+      if (!clientId && walkInClient.full_name && walkInClient.phone) {
+        const { data: newClient, error: clientError } = await supabase
+          .from('clients')
+          .insert({
+            tenant_id: tenantId,
+            full_name: walkInClient.full_name,
+            phone: walkInClient.phone,
+            email: walkInClient.email || null,
+            gender: walkInClient.gender || null,
+          })
+          .select()
+          .single();
+
+        if (clientError) {
+          console.error('Error creating client:', clientError);
+          alert('Failed to create client: ' + clientError.message);
+          setLoading(false);
+          return;
+        }
+
+        clientId = newClient.id;
+      }
+
       // Calculate total duration and create timestamps
       const totalDuration = bookingItems.reduce((sum, item) => sum + (item.duration_minutes || 0), 0);
       const scheduledStart = new Date(`${formData.scheduled_date}T${formData.scheduled_time}`);
@@ -182,7 +214,7 @@ export default function NewBookingPage() {
         .insert({
           tenant_id: tenantId,
           branch_id: formData.branch_id,
-          client_id: formData.client_id || null,
+          client_id: clientId || null,
           scheduled_start: scheduledStart.toISOString(),
           scheduled_end: scheduledEnd.toISOString(),
           status: formData.status,
@@ -193,15 +225,18 @@ export default function NewBookingPage() {
 
       if (bookingError) throw bookingError;
 
-      // Create booking items
-      const itemsToInsert = bookingItems.map((item) => ({
-        tenant_id: tenantId,
-        booking_id: booking.id,
-        service_id: item.service_id,
-        staff_id: item.staff_id,
-        duration_minutes: item.duration_minutes || 60,
-        price: item.price || 0,
-      }));
+      // Create booking items with prices from services
+      const itemsToInsert = bookingItems.map((item) => {
+        const service = services.find((s) => s.id === item.service_id);
+        return {
+          tenant_id: tenantId,
+          booking_id: booking.id,
+          service_id: item.service_id,
+          staff_id: item.staff_id,
+          duration_minutes: item.duration_minutes || service?.duration_minutes || 60,
+          price: service?.base_price || 0,
+        };
+      });
 
       const { error: itemsError } = await supabase.from('booking_items').insert(itemsToInsert);
 
@@ -249,7 +284,13 @@ export default function NewBookingPage() {
                   <select
                     id="client_id"
                     value={formData.client_id}
-                    onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
+                    onChange={(e) => {
+                      setFormData({ ...formData, client_id: e.target.value });
+                      // Reset walk-in fields if selecting existing client
+                      if (e.target.value) {
+                        setWalkInClient({ full_name: '', phone: '', email: '', gender: '' });
+                      }
+                    }}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <option value="">Walk-in Customer</option>
@@ -278,7 +319,67 @@ export default function NewBookingPage() {
                     ))}
                   </select>
                 </div>
+              </div>
 
+              {/* Walk-in Client Details */}
+              {!formData.client_id && (
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="text-lg font-semibold mb-4">Walk-in Customer Details</h3>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="walkin_name">Full Name</Label>
+                      <Input
+                        id="walkin_name"
+                        value={walkInClient.full_name}
+                        onChange={(e) => setWalkInClient({ ...walkInClient, full_name: e.target.value })}
+                        placeholder="Enter customer name"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="walkin_phone">Phone Number</Label>
+                      <Input
+                        id="walkin_phone"
+                        type="tel"
+                        value={walkInClient.phone}
+                        onChange={(e) => setWalkInClient({ ...walkInClient, phone: e.target.value })}
+                        placeholder="+91 98765 43210"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="walkin_email">Email (Optional)</Label>
+                      <Input
+                        id="walkin_email"
+                        type="email"
+                        value={walkInClient.email}
+                        onChange={(e) => setWalkInClient({ ...walkInClient, email: e.target.value })}
+                        placeholder="customer@email.com"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="walkin_gender">Gender (Optional)</Label>
+                      <select
+                        id="walkin_gender"
+                        value={walkInClient.gender}
+                        onChange={(e) => setWalkInClient({ ...walkInClient, gender: e.target.value })}
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <option value="">Select Gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Fill in these details to add this customer to your client database
+                  </p>
+                </div>
+              )}
+
+              <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="scheduled_date">Date *</Label>
                   <Input
@@ -339,7 +440,7 @@ export default function NewBookingPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {bookingItems.map((item, index) => (
-                <div key={index} className="grid gap-4 md:grid-cols-4 border-b pb-4 last:border-0">
+                <div key={index} className="grid gap-4 md:grid-cols-3 border-b pb-4 last:border-0">
                   <div className="space-y-2">
                     <Label>Service *</Label>
                     <select
@@ -374,17 +475,6 @@ export default function NewBookingPage() {
                     </select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Price</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={item.price || ''}
-                      onChange={(e) => updateBookingItem(index, 'price', parseFloat(e.target.value) || 0)}
-                      required
-                    />
-                  </div>
-
                   <div className="space-y-2 flex items-end">
                     <Button
                       type="button"
@@ -398,15 +488,6 @@ export default function NewBookingPage() {
                   </div>
                 </div>
               ))}
-
-              <div className="pt-4 border-t">
-                <div className="flex justify-between items-center text-lg font-semibold">
-                  <span>Total Amount:</span>
-                  <span>
-                    ₹{bookingItems.reduce((sum, item) => sum + (item.price || 0), 0).toFixed(2)}
-                  </span>
-                </div>
-              </div>
             </CardContent>
           </Card>
 
