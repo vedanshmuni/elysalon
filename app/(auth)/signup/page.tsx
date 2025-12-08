@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-export default function SignUpPage() {
+function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const inviteToken = searchParams.get('invite');
@@ -201,7 +201,7 @@ export default function SignUpPage() {
             </div>
           )}
           <Button type="submit" className="w-full" disabled={loading}>
-          {error && <p className="text-sm text-destructive">{error}</p>}}
+            {loading ? 'Creating account...' : 'Sign Up'}
           </Button>
         </form>
         <div className="mt-4 text-center text-sm">
@@ -211,5 +211,13 @@ export default function SignUpPage() {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SignUpForm />
+    </Suspense>
   );
 }

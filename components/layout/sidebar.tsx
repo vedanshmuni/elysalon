@@ -15,12 +15,14 @@ import {
   Building2,
   Mail,
   LogOut,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/helpers';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar },
+  { name: 'Booking Requests', href: '/dashboard/bookings/requests', icon: MessageSquare },
   { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { name: 'Clients', href: '/dashboard/clients', icon: Users },
   { name: 'Staff', href: '/dashboard/staff', icon: Users },

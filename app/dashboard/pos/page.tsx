@@ -229,7 +229,36 @@ export default function POSPage() {
 
       if (paymentError) throw paymentError;
 
-      alert('Payment processed successfully!');
+      // Ask if user wants to send invoice via WhatsApp
+      const selectedClient = clients.find(c => c.id === invoiceData.client_id);
+      if (selectedClient?.phone) {
+        const sendViaWhatsApp = confirm(
+          `Payment processed successfully!\n\nWould you like to send the invoice to ${selectedClient.full_name} via WhatsApp?`
+        );
+
+        if (sendViaWhatsApp) {
+          try {
+            const response = await fetch('/api/invoices/send-whatsapp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ invoiceId: invoice.id }),
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+              alert('Invoice sent via WhatsApp successfully!');
+            } else {
+              alert(`Failed to send invoice via WhatsApp: ${result.error}`);
+            }
+          } catch (error: any) {
+            console.error('Error sending invoice via WhatsApp:', error);
+            alert('Failed to send invoice via WhatsApp');
+          }
+        }
+      } else {
+        alert('Payment processed successfully!');
+      }
       
       // Reset form
       setItems([]);

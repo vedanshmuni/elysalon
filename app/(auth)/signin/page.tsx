@@ -39,7 +39,7 @@ export default function SignInPage() {
         .eq('id', data.user.id)
         .single();
 
-      if (!profile?.default_tenant_id) {
+      if (!profile || !(profile as any).default_tenant_id) {
         router.push('/onboarding');
       } else {
         router.push('/dashboard');
