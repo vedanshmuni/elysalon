@@ -1,0 +1,221 @@
+/* Enhanced Calendar Custom Styles */
+.rbc-calendar {
+  font-family: inherit;
+}
+
+.rbc-event {
+  padding: 4px 6px;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.rbc-event:hover {
+  opacity: 1 !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+  transition: all 0.2s;
+}
+
+.rbc-event.rbc-selected {
+  background-color: inherit !important;
+}
+
+.rbc-addons-dnd .rbc-event {
+  cursor: move;
+}
+
+.rbc-addons-dnd .rbc-event:hover {
+  cursor: move;
+}
+
+.rbc-addons-dnd-resizable {
+  position: relative;
+}
+
+.rbc-addons-dnd-resize-anchor {
+  width: 100%;
+  height: 8px;
+  position: absolute;
+  cursor: ns-resize;
+  z-index: 1;
+}
+
+.rbc-addons-dnd-resize-anchor-top {
+  top: 0;
+}
+
+.rbc-addons-dnd-resize-anchor-bottom {
+  bottom: 0;
+}
+
+.rbc-time-slot {
+  min-height: 40px;
+}
+
+.rbc-day-slot .rbc-time-slot {
+  border-top: 1px solid #f0f0f0;
+}
+
+.rbc-today {
+  background-color: #f0f9ff;
+}
+
+.rbc-toolbar {
+  padding: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-bottom: 2px solid #e5e7eb;
+  margin-bottom: 15px;
+}
+
+.rbc-toolbar button {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background-color: white;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.rbc-toolbar button:hover {
+  background-color: #f3f4f6;
+  border-color: #9ca3af;
+}
+
+.rbc-toolbar button.rbc-active {
+  background-color: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.rbc-header {
+  padding: 12px 4px;
+  font-weight: 600;
+  border-bottom: 2px solid #e5e7eb;
+  background-color: #f9fafb;
+}
+
+.rbc-month-view {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rbc-time-view {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rbc-agenda-view {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rbc-time-header-content {
+  border-left: 1px solid #e5e7eb;
+}
+
+.rbc-time-content {
+  border-top: 2px solid #e5e7eb;
+}
+
+.rbc-current-time-indicator {
+  background-color: #ef4444;
+  height: 2px;
+}
+
+/* Frozen booking indicator */
+.rbc-event[style*="border: 2px solid"] {
+  padding: 2px 6px;
+}
+
+/* Drag preview */
+.rbc-addons-dnd-dragging {
+  opacity: 0.5;
+}
+
+.rbc-addons-dnd-drag-preview {
+  opacity: 0.7;
+  border: 2px dashed #6b7280;
+}
+
+/* Month view event limit */
+.rbc-show-more {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+}
+
+.rbc-show-more:hover {
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+/* Agenda view styling */
+.rbc-agenda-table {
+  border-spacing: 0;
+  width: 100%;
+}
+
+.rbc-agenda-table tbody > tr > td {
+  padding: 12px 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.rbc-agenda-table tbody > tr:hover {
+  background-color: #f9fafb;
+}
+
+.rbc-agenda-date-cell,
+.rbc-agenda-time-cell {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.rbc-agenda-event-cell {
+  width: 100%;
+}
+
+/* Selection highlight */
+.rbc-slot-selection {
+  background-color: rgba(59, 130, 246, 0.2);
+  border: 2px solid #3b82f6;
+}
+
+/* Time gutter (time labels) */
+.rbc-time-gutter {
+  background-color: #f9fafb;
+}
+
+.rbc-timeslot-group {
+  border-left: 1px solid #e5e7eb;
+  min-height: 60px;
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .rbc-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .rbc-toolbar-label {
+    text-align: center;
+    padding: 8px 0;
+  }
+  
+  .rbc-event {
+    font-size: 0.75rem;
+    padding: 2px 4px;
+  }
+}

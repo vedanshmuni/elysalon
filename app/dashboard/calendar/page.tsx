@@ -209,7 +209,9 @@ export default async function CalendarPage({
                           statusColors[booking.status] || 'bg-gray-100'
                         }`}
                       >
-                        <div className="font-medium">{formatTime(booking.scheduled_time)}</div>
+                        <div className="font-medium">
+                          {new Date(booking.scheduled_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
                         <div className="truncate">{booking.client?.full_name || 'Walk-in'}</div>
                         <div className="text-[10px] text-muted-foreground truncate">
                           {booking.booking_items?.[0]?.service?.name}
