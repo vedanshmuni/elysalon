@@ -194,14 +194,14 @@ export default function SignUpPage() {
               minLength={6}
             />
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-800">
+              <p className="font-semibold">Error:</p>
+              <p>{error}</p>
+            </div>
+          )}
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading 
-              ? 'Creating account...' 
-              : inviteDetails 
-                ? 'Accept Invitation & Sign Up' 
-                : 'Sign Up'
-            }
+          {error && <p className="text-sm text-destructive">{error}</p>}}
           </Button>
         </form>
         <div className="mt-4 text-center text-sm">

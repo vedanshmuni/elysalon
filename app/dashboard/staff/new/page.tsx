@@ -129,11 +129,11 @@ export default function NewStaffPage() {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <h3 className="font-semibold text-blue-900 mb-2">💡 Need to give them system access?</h3>
         <p className="text-sm text-blue-800 mb-2">
-          This will add the staff member for scheduling and tracking. To give them login access, use <strong>Invite Staff</strong> instead.
+          This will add the staff member for scheduling only. To give them login access, use <strong>Create Staff Account</strong> instead.
         </p>
-        <Link href="/dashboard/staff/invite">
+        <Link href="/dashboard/staff/create-account">
           <Button type="button" variant="outline" size="sm">
-            Go to Invite Staff
+            Go to Create Staff Account
           </Button>
         </Link>
       </div>

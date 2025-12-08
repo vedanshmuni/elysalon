@@ -31,20 +31,27 @@ export default async function StaffPage() {
   const tenantId = profile?.default_tenant_id;
   if (!tenantId) return null;
 
-  // Fetch staff members (including those without user accounts)
-  const { data: staffMembers } = await supabase
+  // Fetch staff members
+  const { data: staffMembers, error: staffError } = await supabase
     .from('staff')
-    .select(
-      `
-      *,
-      branch:branches(id, name)
-    `
-    )
+    .select('*, branch:branches(id, name)')
     .eq('tenant_id', tenantId)
     .order('display_name', { ascending: true });
 
+  // Fetch tenant_users to get roles
+  const { data: tenantUsers } = await supabase
+    .from('tenant_users')
+    .select('user_id, role')
+    .eq('tenant_id', tenantId);
+
+  // Map roles to staff members
+  const staffWithRoles = staffMembers?.map((staff: any) => ({
+    ...staff,
+    role: tenantUsers?.find((tu: any) => tu.user_id === staff.user_id)?.role || null
+  }));
+
   // Get active staff count
-  const activeCount = staffMembers?.filter((s: any) => s.is_active).length || 0;
+  const activeCount = staffWithRoles?.filter((s: any) => s.is_active).length || 0;
 
   return (
     <div className="space-y-6">
@@ -55,27 +62,21 @@ export default async function StaffPage() {
         </div>
         <div className="flex gap-2">
           <Link href="/dashboard/staff/commissions">
-            <Button variant="outline">
+            <Button variant="outline" size="sm">
               <DollarSign className="mr-2 h-4 w-4" />
               Commissions
             </Button>
           </Link>
           <Link href="/dashboard/staff/shifts">
-            <Button variant="outline">
+            <Button variant="outline" size="sm">
               <Calendar className="mr-2 h-4 w-4" />
               Shifts
             </Button>
           </Link>
-          <Link href="/dashboard/staff/invite">
-            <Button variant="outline">
-              <Users className="mr-2 h-4 w-4" />
-              Invite Staff
-            </Button>
-          </Link>
-          <Link href="/dashboard/staff/new">
+          <Link href="/dashboard/staff/create-account">
             <Button>
               <Plus className="mr-2 h-4 w-4" />
-              Add Staff
+              Create Staff Account
             </Button>
           </Link>
         </div>
@@ -89,7 +90,7 @@ export default async function StaffPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{staffMembers?.length || 0}</div>
+            <div className="text-2xl font-bold">{staffWithRoles?.length || 0}</div>
           </CardContent>
         </Card>
         <Card>
@@ -130,7 +131,7 @@ export default async function StaffPage() {
       {/* Staff Table */}
       <Card>
         <CardHeader>
-          <CardTitle>All Staff Members ({staffMembers?.length || 0})</CardTitle>
+          <CardTitle>All Staff Members ({staffWithRoles?.length || 0})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -147,8 +148,8 @@ export default async function StaffPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {staffMembers && staffMembers.length > 0 ? (
-                staffMembers.map((staff: any) => (
+              {staffWithRoles && staffWithRoles.length > 0 ? (
+                staffWithRoles.map((staff: any) => (
                   <TableRow key={staff.id}>
                     <TableCell className="font-medium">
                       {staff.display_name}
@@ -157,7 +158,20 @@ export default async function StaffPage() {
                       )}
                     </TableCell>
                     <TableCell>-</TableCell>
-                    <TableCell>{staff.role_label || 'Staff'}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                          staff.role === 'OWNER' ? 'bg-purple-100 text-purple-800' :
+                          staff.role === 'MANAGER' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {staff.role || 'STAFF'}
+                        </span>
+                        {staff.role_label && (
+                          <span className="text-xs text-muted-foreground">{staff.role_label}</span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{staff.branch?.name || 'All Branches'}</TableCell>
                     <TableCell>
                       {staff.skills && staff.skills.length > 0 ? (

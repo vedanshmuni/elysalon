@@ -1,5 +1,5 @@
--- Function to handle complete onboarding flow
--- This bypasses RLS to create tenant, branch, tenant_user, and staff records atomically
+-- Revert the role_label change from migration 003
+-- This restores the original version without role_label in the staff INSERT
 
 CREATE OR REPLACE FUNCTION complete_onboarding(
     p_salon_name TEXT,
@@ -57,9 +57,9 @@ BEGIN
     SET default_tenant_id = v_tenant_id,
         full_name = COALESCE(profiles.full_name, EXCLUDED.full_name);
 
-    -- Create staff profile for owner
-    INSERT INTO public.staff (tenant_id, user_id, branch_id, display_name, role_label)
-    VALUES (v_tenant_id, v_user_id, v_branch_id, COALESCE(p_user_full_name, 'Owner'), 'Admin/Owner');
+    -- Create staff profile for owner (WITHOUT role_label - reverted to original)
+    INSERT INTO public.staff (tenant_id, user_id, branch_id, display_name)
+    VALUES (v_tenant_id, v_user_id, v_branch_id, COALESCE(p_user_full_name, 'Owner'));
 
     -- Return result
     v_result := json_build_object(
@@ -71,6 +71,3 @@ BEGIN
     RETURN v_result;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Grant execute permission to authenticated users
-GRANT EXECUTE ON FUNCTION complete_onboarding(TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
