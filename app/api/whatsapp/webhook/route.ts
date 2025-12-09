@@ -100,36 +100,23 @@ async function getTenantByWhatsAppNumber(whatsappNumber: string): Promise<string
       cleaned: cleanNumber
     });
 
-    // Find tenant by WhatsApp number - try exact match first
-    let { data: tenant, error } = await supabase
+    // First, let's see ALL tenants to debug
+    const { data: allTenants } = await supabase
+      .from('tenants')
+      .select('id, name, whatsapp_number');
+    
+    console.log('All tenants in database:', allTenants);
+
+    // Find tenant by WhatsApp number using LIKE for fuzzy matching
+    let { data: tenants, error } = await supabase
       .from('tenants')
       .select('id, name, whatsapp_number')
-      .eq('whatsapp_number', cleanNumber)
-      .single();
+      .or(`whatsapp_number.eq.${cleanNumber},whatsapp_number.eq.+${cleanNumber},whatsapp_number.like.%${cleanNumber}%`);
 
-    // If not found, try with + prefix
-    if (!tenant && !error) {
-      const result = await supabase
-        .from('tenants')
-        .select('id, name, whatsapp_number')
-        .eq('whatsapp_number', `+${cleanNumber}`)
-        .single();
-      tenant = result.data;
-      error = result.error;
-    }
+    console.log('Query result:', { tenants, error });
 
-    // If still not found, try original format
-    if (!tenant && !error && whatsappNumber !== cleanNumber) {
-      const result = await supabase
-        .from('tenants')
-        .select('id, name, whatsapp_number')
-        .eq('whatsapp_number', whatsappNumber)
-        .single();
-      tenant = result.data;
-      error = result.error;
-    }
-
-    if (tenant) {
+    if (tenants && tenants.length > 0) {
+      const tenant = tenants[0];
       console.log('✅ Found tenant for WhatsApp number:', tenant.name, 'with number:', tenant.whatsapp_number);
       return tenant.id;
     }
