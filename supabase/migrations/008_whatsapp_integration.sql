@@ -2,6 +2,10 @@
 ALTER TABLE tenants
 ADD COLUMN IF NOT EXISTS whatsapp_number TEXT;
 
+-- Add index for faster WhatsApp number lookups
+CREATE INDEX IF NOT EXISTS idx_tenants_whatsapp_number 
+ON tenants(whatsapp_number) WHERE whatsapp_number IS NOT NULL;
+
 -- Create booking_requests table for WhatsApp booking requests
 CREATE TABLE IF NOT EXISTS public.booking_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
