@@ -30,19 +30,35 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // WhatsApp sends status updates and messages
+    // Handle interactive button responses
+    if (body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.interactive) {
+      const message = body.entry[0].changes[0].value.messages[0];
+      const from = message.from;
+      const buttonReply = message.interactive?.button_reply?.id;
+
+      console.log('Received button response:', { from, buttonReply });
+
+      if (buttonReply === 'book_appointment') {
+        await handleBookingRequest(from, 'I want to book an appointment');
+      } else if (buttonReply === 'view_services') {
+        await handleViewServices(from);
+      } else if (buttonReply === 'contact_us') {
+        await handleContactUs(from);
+      }
+
+      return NextResponse.json({ status: 'received' }, { status: 200 });
+    }
+
+    // Handle regular text messages
     if (body.entry?.[0]?.changes?.[0]?.value?.messages) {
       const message = body.entry[0].changes[0].value.messages[0];
-      const from = message.from; // Phone number
+      const from = message.from;
       const messageBody = message.text?.body || '';
 
       console.log('Received WhatsApp message:', { from, messageBody });
 
-      // Check if it's a booking request
-      if (messageBody.toLowerCase().includes('book') || 
-          messageBody.toLowerCase().includes('appointment')) {
-        await handleBookingRequest(from, messageBody);
-      }
+      // Send welcome message with interactive buttons
+      await handleIncomingMessage(from, messageBody);
     }
 
     // Always return 200 to acknowledge receipt
@@ -54,22 +70,36 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Handle incoming booking requests from WhatsApp
+ * Handle incoming messages and send welcome menu
+ */
+async function handleIncomingMessage(phoneNumber: string, message: string) {
+  const { sendInteractiveButtons } = await import('@/lib/whatsapp/client');
+  
+  await sendInteractiveButtons(phoneNumber, {
+    bodyText: `Hello! 👋 Welcome to our salon!\n\nHow can we help you today?`,
+    buttons: [
+      { id: 'book_appointment', title: '📅 Book Appointment' },
+      { id: 'view_services', title: '💇 View Services' },
+      { id: 'contact_us', title: '📞 Contact Us' },
+    ],
+  });
+}
+
+/**
+ * Handle booking requests from WhatsApp
  */
 async function handleBookingRequest(phoneNumber: string, message: string) {
   try {
     const supabase = await createClient();
+    const { sendTextMessage } = await import('@/lib/whatsapp/client');
 
     // Try to find existing client by phone
-    const { data: client } = await supabase
+    const { data: clients } = await supabase
       .from('clients')
-      .select('id, full_name, tenant_id')
-      .eq('phone', phoneNumber)
-      .single();
+      .select('id, full_name, tenant_id, tenants(name, whatsapp_number)')
+      .eq('phone', phoneNumber);
 
-    // Parse message for booking details (simple parsing)
-    // Format expected: "Book [service] on [date] at [time]"
-    // For MVP, we'll create a pending request
+    const client = clients?.[0];
 
     // Create a booking request entry
     const { data: request, error } = await supabase
@@ -87,27 +117,59 @@ async function handleBookingRequest(phoneNumber: string, message: string) {
 
     if (error) throw error;
 
-    // Get salon's WhatsApp number to send notification
-    if (client?.tenant_id) {
-      const { data: tenant } = await supabase
-        .from('tenants')
-        .select('whatsapp_number, name')
-        .eq('id', client.tenant_id)
-        .single();
+    // Send confirmation to customer
+    await sendTextMessage(
+      phoneNumber,
+      `✅ Your booking request has been received!\n\nOur team will review it and get back to you shortly. You'll receive a confirmation once your appointment is approved.\n\nBooking Reference: ${request.id.slice(0, 8)}`
+    );
 
-      if (tenant?.whatsapp_number) {
-        await sendNewBookingRequestNotification(tenant.whatsapp_number, {
-          clientName: client.full_name || 'Unknown',
-          clientPhone: phoneNumber,
-          serviceName: 'To be confirmed',
-          preferredDate: 'To be confirmed',
-          preferredTime: 'To be confirmed',
-        });
-      }
-    }
-
+    // Notify salon owner/staff via dashboard (notification will appear in booking requests page)
     console.log('Booking request created:', request);
+    
+    // If there's a tenant with WhatsApp, notify them
+    if (client?.tenants?.whatsapp_number) {
+      await sendNewBookingRequestNotification(client.tenants.whatsapp_number, {
+        clientName: client.full_name || 'New Customer',
+        clientPhone: phoneNumber,
+        serviceName: 'To be confirmed',
+        preferredDate: 'To be confirmed',
+        preferredTime: 'To be confirmed',
+      });
+    }
   } catch (error) {
     console.error('Error handling booking request:', error);
   }
+}
+
+/**
+ * Handle view services request
+ */
+async function handleViewServices(phoneNumber: string) {
+  const { sendTextMessage } = await import('@/lib/whatsapp/client');
+  
+  await sendTextMessage(
+    phoneNumber,
+    `💇 Our Services:\n\n` +
+    `• Haircut & Styling\n` +
+    `• Hair Color & Highlights\n` +
+    `• Spa & Facial Treatments\n` +
+    `• Manicure & Pedicure\n` +
+    `• Bridal Makeup\n` +
+    `• And much more!\n\n` +
+    `Visit our website or book an appointment to see our full service menu! ✨`
+  );
+}
+
+/**
+ * Handle contact us request
+ */
+async function handleContactUs(phoneNumber: string) {
+  const { sendTextMessage } = await import('@/lib/whatsapp/client');
+  
+  await sendTextMessage(
+    phoneNumber,
+    `📞 Contact Us:\n\n` +
+    `Feel free to reach out to us for any queries!\n\n` +
+    `We're here to help! 💙`
+  );
 }

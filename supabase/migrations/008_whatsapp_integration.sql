@@ -36,27 +36,15 @@ ALTER TABLE booking_requests ENABLE ROW LEVEL SECURITY;
 -- RLS Policy for booking_requests
 CREATE POLICY "Users can view booking requests from their tenant"
 ON booking_requests FOR SELECT
-USING (
-    tenant_id IN (
-        SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid()
-    )
-);
+USING (user_belongs_to_tenant(tenant_id));
 
 CREATE POLICY "Users can insert booking requests"
 ON booking_requests FOR INSERT
-WITH CHECK (
-    tenant_id IN (
-        SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid()
-    )
-);
+WITH CHECK (user_belongs_to_tenant(tenant_id));
 
 CREATE POLICY "Users can update booking requests from their tenant"
 ON booking_requests FOR UPDATE
-USING (
-    tenant_id IN (
-        SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid()
-    )
-);
+USING (user_belongs_to_tenant(tenant_id));
 
 -- Add reminder_sent flag to bookings table
 ALTER TABLE bookings
