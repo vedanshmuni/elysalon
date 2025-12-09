@@ -58,31 +58,26 @@ export async function POST(request: NextRequest) {
       total: invoice.total,
     };
 
-    // Generate invoice PDF URL (you can integrate with a PDF service)
-    // For now, we'll use the app URL to generate a PDF view
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://elysalon.onrender.com';
-    const pdfUrl = `${appUrl}/api/invoices/${invoiceId}/pdf`;
-
     // Send invoice via WhatsApp
-    await sendInvoicePDF(client.phone, {
-      clientName: client.full_name,
-      invoiceNumber: invoice.invoice_number,
-      pdfUrl: pdfUrl,
-      amount: `₹${invoice.total.toFixed(2)}`,
-    });
+    const result = await sendInvoicePDF(client.phone, invoiceDetails);
+
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error || 'Failed to send WhatsApp message' },
+        { status: 500 }
+      );
+    }
 
     // Update invoice to mark as sent via WhatsApp
     await supabase
       .from('invoices')
-      .update({ 
-        invoice_sent_via_whatsapp: true,
-        invoice_sent_at: new Date().toISOString()
-      })
+      .update({ invoice_sent_via_whatsapp: true })
       .eq('id', invoiceId);
 
     return NextResponse.json({
       success: true,
       message: 'Invoice sent via WhatsApp successfully',
+      messageId: result.messageId,
     });
   } catch (error: any) {
     console.error('Error sending invoice via WhatsApp:', error);
