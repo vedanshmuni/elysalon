@@ -171,7 +171,6 @@ export default function SettingsPage() {
               </p>
             </div>
           </CardContent>
-        </Card>dContent>
         </Card>
 
         {/* Regional Settings */}
