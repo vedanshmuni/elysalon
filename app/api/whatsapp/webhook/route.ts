@@ -58,15 +58,29 @@ export async function GET(request: NextRequest) {
  * Receives incoming messages from WhatsApp
  */
 export async function POST(request: NextRequest) {
+  // Log immediately to see if endpoint is hit
+  const timestamp = new Date().toISOString();
+  console.log('\n========================================');
+  console.log('🔔 WEBHOOK CALLED AT:', timestamp);
+  console.log('========================================\n');
+
   try {
-    const body = await request.json();
-    console.log('📱 Received webhook payload:', JSON.stringify(body, null, 2));
+    // Parse body
+    let body;
+    try {
+      body = await request.json();
+      console.log('📱 Raw webhook payload:', JSON.stringify(body, null, 2));
+    } catch (parseError) {
+      console.error('❌ Failed to parse webhook body:', parseError);
+      return NextResponse.json({ status: 'error', message: 'Invalid JSON' }, { status: 400 });
+    }
 
     // WhatsApp sends status updates and messages
     const value = body.entry?.[0]?.changes?.[0]?.value;
     
     if (!value) {
-      console.log('⚠️ No value in webhook payload');
+      console.log('⚠️ No value in webhook payload - might be a status update');
+      console.log('Full body:', JSON.stringify(body, null, 2));
       return NextResponse.json({ status: 'received' }, { status: 200 });
     }
 
@@ -74,44 +88,71 @@ export async function POST(request: NextRequest) {
     const businessPhoneNumberId = value.metadata?.phone_number_id;
     const displayPhoneNumber = value.metadata?.display_phone_number;
     
-    console.log('📞 Message received on business phone:', {
+    console.log('📞 Business phone info:', {
       businessPhoneNumberId,
       displayPhoneNumber
     });
+
+    // Check for status updates (message sent, delivered, read, etc.)
+    if (value.statuses) {
+      console.log('📊 Status update received:', JSON.stringify(value.statuses, null, 2));
+      return NextResponse.json({ status: 'received' }, { status: 200 });
+    }
 
     // Process incoming messages
     if (value.messages && value.messages.length > 0) {
       const message = value.messages[0];
       const from = message.from; // Customer's phone number
       const messageBody = message.text?.body || '';
+      const messageType = message.type;
 
-      console.log('💬 Received WhatsApp message from customer:', { from, messageBody });
+      console.log('💬 Message details:', { 
+        from, 
+        messageBody, 
+        messageType,
+        timestamp: message.timestamp 
+      });
+
+      // Only process text messages
+      if (messageType !== 'text') {
+        console.log(`⚠️ Ignoring non-text message type: ${messageType}`);
+        return NextResponse.json({ status: 'received' }, { status: 200 });
+      }
 
       // Identify which tenant owns this business WhatsApp number
+      console.log('🔍 Finding tenant for business number:', displayPhoneNumber);
       const tenant = await findTenantByWhatsAppNumber(displayPhoneNumber);
       
       if (!tenant) {
         console.error('❌ No tenant found for business WhatsApp number:', displayPhoneNumber);
+        console.error('💡 Make sure your tenant has whatsapp_number set to:', displayPhoneNumber);
         return NextResponse.json({ status: 'received' }, { status: 200 });
       }
 
       console.log('✅ Found tenant:', { id: tenant.id, name: tenant.name });
 
       // Check if it's a booking request
-      if (messageBody.toLowerCase().includes('book') || 
-          messageBody.toLowerCase().includes('appointment')) {
+      const lowerMessage = messageBody.toLowerCase();
+      if (lowerMessage.includes('book') || lowerMessage.includes('appointment')) {
+        console.log('📅 Processing as booking request');
         await handleBookingRequest(from, messageBody, tenant.id);
       } else {
+        console.log('💭 Sending default response');
         // Send a default response for non-booking messages
         await sendTextMessage(from, `Hello! Thank you for messaging ${tenant.name}. To book an appointment, please include the word "book" or "appointment" in your message. 😊`);
       }
+    } else {
+      console.log('⚠️ No messages in webhook payload');
     }
 
     // Always return 200 to acknowledge receipt
+    console.log('✅ Webhook processed successfully\n');
     return NextResponse.json({ status: 'received' }, { status: 200 });
-  } catch (error) {
-    console.error('❌ Error processing WhatsApp webhook:', error);
-    return NextResponse.json({ status: 'error' }, { status: 500 });
+  } catch (error: any) {
+    console.error('❌ CRITICAL ERROR in webhook:', error);
+    console.error('Stack trace:', error.stack);
+    // Still return 200 to prevent WhatsApp from retrying
+    return NextResponse.json({ status: 'error', message: error.message }, { status: 200 });
   }
 }
 

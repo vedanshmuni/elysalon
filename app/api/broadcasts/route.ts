@@ -27,12 +27,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No tenant found' }, { status: 400 });
     }
 
-    // Fetch broadcasts
-    const { data: broadcasts, error } = await supabase
-      .from('broadcasts')
+    // Fetch campaigns (broadcasts)
+    const { data: campaigns, error } = await supabase
+      .from('campaigns')
       .select(`
-        *,
-        created_by_user:profiles(full_name)
+        *
       `)
       .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false })
@@ -41,12 +40,12 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Error fetching broadcasts:', error);
       return NextResponse.json(
-        { error: 'Failed to fetch broadcasts' },
+        { error: 'Failed to fetch broadcasts', details: error },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ broadcasts: broadcasts || [] });
+    return NextResponse.json({ broadcasts: campaigns || [] });
   } catch (error: any) {
     console.error('Error in broadcasts fetch:', error);
     return NextResponse.json(
