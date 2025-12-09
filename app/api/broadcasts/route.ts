@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       .from('broadcasts')
       .select(`
         *,
-        created_by_user:profiles!broadcasts_created_by_fkey(full_name)
+        created_by_user:profiles(full_name)
       `)
       .eq('tenant_id', tenantId)
       .order('created_at', { ascending: false })

@@ -6,6 +6,11 @@ ADD COLUMN IF NOT EXISTS whatsapp_number TEXT;
 CREATE INDEX IF NOT EXISTS idx_tenants_whatsapp_number 
 ON tenants(whatsapp_number) WHERE whatsapp_number IS NOT NULL;
 
+-- Update your tenant with the WhatsApp number (update this with your actual tenant ID if different)
+-- To find your tenant_id, run: SELECT id, name FROM tenants;
+-- Then update with: UPDATE tenants SET whatsapp_number = '919920047759' WHERE id = 'your-tenant-id';
+COMMENT ON COLUMN tenants.whatsapp_number IS 'Business WhatsApp number in format: country_code + phone (e.g., 919920047759)';
+
 -- Create booking_requests table for WhatsApp booking requests
 CREATE TABLE IF NOT EXISTS public.booking_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
