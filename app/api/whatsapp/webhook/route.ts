@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/server';
-import { sendNewBookingRequestNotification, sendTextMessage } from '@/lib/whatsapp/client';
+import { sendTextMessage, sendInteractiveButtons } from '@/lib/whatsapp/client';
+
+// Default tenant ID from environment variable (simpler approach like elychat)
+const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID;
 
 /**
  * Clean phone number to various formats for matching
@@ -58,202 +61,296 @@ export async function GET(request: NextRequest) {
  * Receives incoming messages from WhatsApp
  */
 export async function POST(request: NextRequest) {
-  // Log immediately to see if endpoint is hit
-  const timestamp = new Date().toISOString();
-  console.log('\n========================================');
-  console.log('🔔 WEBHOOK CALLED AT:', timestamp);
-  console.log('========================================\n');
+  console.log('\n========== WHATSAPP WEBHOOK ==========');
+  console.log('Time:', new Date().toISOString());
 
   try {
-    // Parse body
-    let body;
-    try {
-      body = await request.json();
-      console.log('📱 Raw webhook payload:', JSON.stringify(body, null, 2));
-    } catch (parseError) {
-      console.error('❌ Failed to parse webhook body:', parseError);
-      return NextResponse.json({ status: 'error', message: 'Invalid JSON' }, { status: 400 });
-    }
-
+    const body = await request.json();
+    
     // WhatsApp sends status updates and messages
     const value = body.entry?.[0]?.changes?.[0]?.value;
     
     if (!value) {
-      console.log('⚠️ No value in webhook payload - might be a status update');
-      console.log('Full body:', JSON.stringify(body, null, 2));
+      console.log('No value in webhook - status update or other');
       return NextResponse.json({ status: 'received' }, { status: 200 });
     }
 
-    // Extract business phone number info
-    const businessPhoneNumberId = value.metadata?.phone_number_id;
-    const displayPhoneNumber = value.metadata?.display_phone_number;
-    
-    console.log('📞 Business phone info:', {
-      businessPhoneNumberId,
-      displayPhoneNumber
-    });
-
-    // Check for status updates (message sent, delivered, read, etc.)
+    // Check for status updates
     if (value.statuses) {
-      console.log('📊 Status update received:', JSON.stringify(value.statuses, null, 2));
+      console.log('Status update received - ignoring');
       return NextResponse.json({ status: 'received' }, { status: 200 });
     }
 
     // Process incoming messages
-    if (value.messages && value.messages.length > 0) {
-      const message = value.messages[0];
-      const from = message.from; // Customer's phone number
-      const messageBody = message.text?.body || '';
-      const messageType = message.type;
-
-      console.log('💬 Message details:', { 
-        from, 
-        messageBody, 
-        messageType,
-        timestamp: message.timestamp 
-      });
-
-      // Only process text messages
-      if (messageType !== 'text') {
-        console.log(`⚠️ Ignoring non-text message type: ${messageType}`);
-        return NextResponse.json({ status: 'received' }, { status: 200 });
-      }
-
-      // Identify which tenant owns this business WhatsApp number
-      console.log('🔍 Finding tenant for business number:', displayPhoneNumber);
-      const tenant = await findTenantByWhatsAppNumber(displayPhoneNumber);
-      
-      if (!tenant) {
-        console.error('❌ No tenant found for business WhatsApp number:', displayPhoneNumber);
-        console.error('💡 Make sure your tenant has whatsapp_number set to:', displayPhoneNumber);
-        return NextResponse.json({ status: 'received' }, { status: 200 });
-      }
-
-      console.log('✅ Found tenant:', { id: tenant.id, name: tenant.name });
-
-      // Check if it's a booking request
-      const lowerMessage = messageBody.toLowerCase();
-      if (lowerMessage.includes('book') || lowerMessage.includes('appointment')) {
-        console.log('📅 Processing as booking request');
-        await handleBookingRequest(from, messageBody, tenant.id);
-      } else {
-        console.log('💭 Sending default response');
-        // Send a default response for non-booking messages
-        await sendTextMessage(from, `Hello! Thank you for messaging ${tenant.name}. To book an appointment, please include the word "book" or "appointment" in your message. 😊`);
-      }
-    } else {
-      console.log('⚠️ No messages in webhook payload');
+    if (!value.messages || value.messages.length === 0) {
+      console.log('No messages in payload');
+      return NextResponse.json({ status: 'received' }, { status: 200 });
     }
 
-    // Always return 200 to acknowledge receipt
-    console.log('✅ Webhook processed successfully\n');
+    const message = value.messages[0];
+    const from = message.from;
+    const messageType = message.type;
+    const profileName = value.contacts?.[0]?.profile?.name || 'Customer';
+
+    console.log('📱 Message from:', from, '| Name:', profileName, '| Type:', messageType);
+
+    // Get tenant ID - use env variable or fetch from database
+    const tenantId = await getTenantId();
+    
+    if (!tenantId) {
+      console.error('❌ No tenant configured! Set DEFAULT_TENANT_ID env variable');
+      return NextResponse.json({ status: 'received' }, { status: 200 });
+    }
+
+    console.log('✅ Using tenant:', tenantId);
+
+    // Handle different message types
+    if (messageType === 'text') {
+      const messageBody = message.text?.body || '';
+      console.log('💬 Text message:', messageBody);
+      
+      await handleTextMessage(from, messageBody, profileName, tenantId);
+    } 
+    else if (messageType === 'interactive') {
+      const interactive = message.interactive;
+      
+      if (interactive?.type === 'button_reply') {
+        const buttonId = interactive.button_reply?.id;
+        console.log('🔘 Button click:', buttonId);
+        await handleButtonClick(from, buttonId, profileName, tenantId);
+      }
+      else if (interactive?.type === 'list_reply') {
+        const listId = interactive.list_reply?.id;
+        console.log('📋 List selection:', listId);
+        await handleListSelection(from, listId, profileName, tenantId);
+      }
+    }
+
+    console.log('✅ Webhook processed\n');
     return NextResponse.json({ status: 'received' }, { status: 200 });
   } catch (error: any) {
-    console.error('❌ CRITICAL ERROR in webhook:', error);
-    console.error('Stack trace:', error.stack);
-    // Still return 200 to prevent WhatsApp from retrying
-    return NextResponse.json({ status: 'error', message: error.message }, { status: 200 });
+    console.error('❌ Webhook error:', error.message);
+    return NextResponse.json({ status: 'error' }, { status: 200 });
   }
 }
 
 /**
- * Find tenant by WhatsApp business number with multiple format matching
+ * Get tenant ID - from env variable or first tenant in database
  */
-async function findTenantByWhatsAppNumber(phoneNumber: string | undefined) {
-  if (!phoneNumber) {
-    console.log('⚠️ No phone number provided');
-    return null;
+async function getTenantId(): Promise<string | null> {
+  // First try environment variable (fastest, most reliable)
+  if (DEFAULT_TENANT_ID) {
+    return DEFAULT_TENANT_ID;
   }
 
-  // Use service role client to bypass RLS policies
-  // Webhooks are not authenticated user requests
-  const supabase = createServiceRoleClient();
-  
-  const cleaned = cleanPhoneNumber(phoneNumber);
-  const variations = getPhoneVariations(phoneNumber);
-  
-  console.log('🔍 Looking for tenant with WhatsApp number:', { 
-    original: phoneNumber, 
-    cleaned,
-    variations 
-  });
-
-  // First, check if we have any tenants at all
-  const { data: allTenants, error: debugError } = await supabase
-    .from('tenants')
-    .select('id, name, whatsapp_number, phone');
-  
-  console.log('📋 All tenants in database:', allTenants);
-  
-  if (debugError) {
-    console.error('❌ Error fetching tenants for debug:', debugError);
-  }
-
-  // Try to find tenant with any variation of the phone number
-  for (const variation of variations) {
-    console.log(`🔎 Trying variation: ${variation}`);
-    
-    const { data: tenant, error } = await supabase
+  // Fallback: get first tenant from database
+  try {
+    const supabase = createServiceRoleClient();
+    const { data: tenant } = await supabase
       .from('tenants')
-      .select('id, name, whatsapp_number, phone')
-      .or(`whatsapp_number.eq.${variation},phone.eq.${variation}`)
+      .select('id')
+      .order('created_at', { ascending: true })
       .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.error('❌ Query error for variation', variation, ':', error);
-      continue;
-    }
-
+      .single();
+    
     if (tenant) {
-      console.log('✅ Found tenant with variation:', variation, tenant);
-      return tenant;
+      console.log('📍 Found tenant from database:', tenant.id);
+      return tenant.id;
     }
+  } catch (error) {
+    console.error('Error fetching tenant:', error);
   }
 
-  console.log('❌ No tenant found. Checked:', variations.join(', '));
   return null;
 }
 
 /**
- * Handle incoming booking requests from WhatsApp
+ * Handle text messages
  */
-async function handleBookingRequest(phoneNumber: string, message: string, tenantId: string) {
+async function handleTextMessage(from: string, messageBody: string, profileName: string, tenantId: string) {
+  const lowerMessage = messageBody.toLowerCase().trim();
+  
+  // Check for greetings or menu request
+  const isGreeting = ['hi', 'hello', 'hey', 'start', 'menu', 'help'].some(
+    word => lowerMessage === word || lowerMessage.startsWith(word + ' ')
+  );
+
+  if (isGreeting) {
+    await sendWelcomeMenu(from, profileName, tenantId);
+    return;
+  }
+
+  // Check for booking keywords
+  if (lowerMessage.includes('book') || lowerMessage.includes('appointment')) {
+    await handleBookingRequest(from, messageBody, profileName, tenantId);
+    return;
+  }
+
+  // Default response with menu
+  await sendWelcomeMenu(from, profileName, tenantId);
+}
+
+/**
+ * Send welcome menu with interactive buttons
+ */
+async function sendWelcomeMenu(from: string, profileName: string, tenantId: string) {
   try {
-    // Use service role client to bypass RLS policies
+    // Get salon name
     const supabase = createServiceRoleClient();
-    const phoneVariations = getPhoneVariations(phoneNumber);
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('name')
+      .eq('id', tenantId)
+      .single();
 
-    console.log('🔍 Looking for client with phone:', phoneVariations);
+    const salonName = tenant?.name || 'our salon';
 
-    // Try to find existing client by phone (try all variations)
-    let client = null;
+    await sendInteractiveButtons(from, {
+      headerText: `Welcome to ${salonName}! 👋`,
+      bodyText: `Hi ${profileName}! How can we help you today?\n\nTap a button below to get started:`,
+      buttons: [
+        { id: 'book_appointment', title: '📅 Book Appointment' },
+        { id: 'view_services', title: '💇 Our Services' },
+        { id: 'contact_us', title: '📞 Contact Us' }
+      ],
+      footerText: 'We look forward to serving you!'
+    });
+
+    console.log('✅ Welcome menu sent to', from);
+  } catch (error) {
+    console.error('Error sending welcome menu:', error);
+    // Fallback to text message
+    await sendTextMessage(from, 
+      `Hi ${profileName}! 👋\n\nWelcome! To book an appointment, please reply with "book" followed by your preferred service and date.\n\nExample: "book haircut tomorrow 3pm"`
+    );
+  }
+}
+
+/**
+ * Handle button clicks
+ */
+async function handleButtonClick(from: string, buttonId: string, profileName: string, tenantId: string) {
+  switch (buttonId) {
+    case 'book_appointment':
+      await sendTextMessage(from, 
+        `Great! Let's book your appointment. 📅\n\nPlease tell us:\n1. What service would you like?\n2. Your preferred date and time?\n\nExample: "Haircut on Saturday at 3pm"`
+      );
+      break;
+    
+    case 'view_services':
+      await sendServicesList(from, tenantId);
+      break;
+    
+    case 'contact_us':
+      await sendContactInfo(from, tenantId);
+      break;
+    
+    default:
+      await sendWelcomeMenu(from, profileName, tenantId);
+  }
+}
+
+/**
+ * Handle list selections
+ */
+async function handleListSelection(from: string, listId: string, profileName: string, tenantId: string) {
+  // For future service selection handling
+  console.log('List selection:', listId);
+  await sendTextMessage(from, 
+    `You selected: ${listId}\n\nPlease tell us your preferred date and time for this service.`
+  );
+}
+
+/**
+ * Send list of services
+ */
+async function sendServicesList(from: string, tenantId: string) {
+  try {
+    const supabase = createServiceRoleClient();
+    const { data: services } = await supabase
+      .from('services')
+      .select('id, name, duration_minutes, base_price')
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true)
+      .order('name')
+      .limit(10);
+
+    if (!services || services.length === 0) {
+      await sendTextMessage(from, 
+        'Our services menu is being updated. Please contact us directly for service details! 📞'
+      );
+      return;
+    }
+
+    let message = '💇 *Our Services:*\n\n';
+    services.forEach((service, index) => {
+      message += `${index + 1}. *${service.name}*\n`;
+      message += `   ⏱ ${service.duration_minutes} mins | ₹${service.base_price}\n\n`;
+    });
+    message += 'Reply with "book [service name]" to make an appointment!';
+
+    await sendTextMessage(from, message);
+  } catch (error) {
+    console.error('Error fetching services:', error);
+    await sendTextMessage(from, 'Unable to load services. Please try again later.');
+  }
+}
+
+/**
+ * Send contact information
+ */
+async function sendContactInfo(from: string, tenantId: string) {
+  try {
+    const supabase = createServiceRoleClient();
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('name, phone, address')
+      .eq('id', tenantId)
+      .single();
+
+    const message = `📍 *${tenant?.name || 'Contact Us'}*\n\n` +
+      (tenant?.phone ? `📞 Phone: ${tenant.phone}\n` : '') +
+      (tenant?.address ? `📍 Address: ${tenant.address}\n` : '') +
+      '\nWe\'re happy to help! 😊';
+
+    await sendTextMessage(from, message);
+  } catch (error) {
+    console.error('Error fetching contact info:', error);
+    await sendTextMessage(from, 'Please check our website or social media for contact details.');
+  }
+}
+
+/**
+ * Handle booking requests
+ */
+async function handleBookingRequest(from: string, message: string, profileName: string, tenantId: string) {
+  try {
+    const supabase = createServiceRoleClient();
+    const phoneVariations = getPhoneVariations(from);
+
+    // Find or create client
+    let clientId = null;
     for (const variation of phoneVariations) {
       const { data } = await supabase
         .from('clients')
-        .select('id, full_name, tenant_id, phone')
+        .select('id')
         .eq('tenant_id', tenantId)
         .eq('phone', variation)
         .maybeSingle();
 
       if (data) {
-        client = data;
-        console.log('✅ Found existing client:', client);
+        clientId = data.id;
         break;
       }
     }
 
-    if (!client) {
-      console.log('⚠️ No existing client found, will create booking request without client_id');
-    }
-
-    // Create a booking request entry
+    // Create booking request
     const { data: request, error } = await supabase
       .from('booking_requests')
       .insert({
         tenant_id: tenantId,
-        client_id: client?.id || null,
-        phone_number: phoneNumber,
+        client_id: clientId,
+        phone_number: from,
         message: message,
         status: 'PENDING',
         source: 'WHATSAPP',
@@ -262,39 +359,22 @@ async function handleBookingRequest(phoneNumber: string, message: string, tenant
       .select()
       .single();
 
-    if (error) {
-      console.error('❌ Error creating booking request:', error);
-      throw error;
-    }
+    if (error) throw error;
 
-    console.log('✅ Booking request created:', request);
-
-    // Send confirmation to customer
-    await sendTextMessage(phoneNumber, 
-      `Thank you for your booking request! 🎉\n\nWe've received your message and will get back to you shortly to confirm your appointment.\n\nYour request ID: ${request.id.substring(0, 8)}`
+    // Send confirmation
+    await sendTextMessage(from, 
+      `Thank you ${profileName}! 🎉\n\n` +
+      `Your booking request has been received.\n\n` +
+      `📋 Request ID: ${request.id.substring(0, 8)}\n\n` +
+      `Our team will review and confirm your appointment shortly. You'll receive a confirmation message once approved!`
     );
 
-    // Get tenant info to send notification
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('whatsapp_number, name, phone')
-      .eq('id', tenantId)
-      .single();
-
-    // Note: Don't send notification to the same number that received the message
-    // The salon owner should check their dashboard for new booking requests
-    
-    console.log('✅ Booking request flow completed successfully');
+    console.log('✅ Booking request created:', request.id);
   } catch (error) {
-    console.error('❌ Error handling booking request:', error);
-    
-    // Try to send error message to customer
-    try {
-      await sendTextMessage(phoneNumber, 
-        'We encountered an error processing your booking request. Please try again or contact us directly. Sorry for the inconvenience! 🙏'
-      );
-    } catch (msgError) {
-      console.error('❌ Failed to send error message to customer:', msgError);
-    }
+    console.error('Error creating booking request:', error);
+    await sendTextMessage(from, 
+      `We received your booking request but encountered an issue. ` +
+      `Please call us directly to confirm your appointment. Sorry for the inconvenience! 🙏`
+    );
   }
 }
