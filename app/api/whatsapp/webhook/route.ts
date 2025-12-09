@@ -161,7 +161,7 @@ async function handleBookingRequest(phoneNumber: string, message: string, tenant
 /**
  * Handle booking requests from WhatsApp
  */
-async function handleBookingRequest(phoneNumber: string, message: string) {
+async function handleBookingRequest(phoneNumber: string, message: string, tenantId: string) {
   try {
     const supabase = await createClient();
     const { sendTextMessage } = await import('@/lib/whatsapp/client');
@@ -211,25 +211,7 @@ async function handleViewServices(phoneNumber: string, tenantId: string) {
       .eq('id', tenantId)
       .single();
 
-    const salonName = tenant?.name || 'our salon';/ Find which salon this customer belongs to by their phone number
-    const { data: clients } = await supabase
-      .from('clients')
-      .select('tenant_id, tenants(name)')
-      .eq('phone', phoneNumber)
-      .limit(1);
-
-    const tenantId = clients?.[0]?.tenant_id;
-    const salonName = clients?.[0]?.tenants?.name || 'our salon';
-
-    if (!tenantId) {
-      // Generic response if not a known client
-      await sendTextMessage(
-        phoneNumber,
-        `💇 Our Services:\n\n` +
-        `Please contact us or book an appointment to see our full service menu! ✨`
-      );
-      return;
-    }
+    const salonName = tenant?.name || 'our salon';
 
     // Fetch actual services from database for this salon
     const { data: services, error } = await supabase

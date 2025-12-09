@@ -37,6 +37,11 @@ ON booking_requests(phone_number);
 -- Enable RLS
 ALTER TABLE booking_requests ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Users can view booking requests from their tenant" ON booking_requests;
+DROP POLICY IF EXISTS "Users can insert booking requests" ON booking_requests;
+DROP POLICY IF EXISTS "Users can update booking requests from their tenant" ON booking_requests;
+
 -- RLS Policy for booking_requests
 CREATE POLICY "Users can view booking requests from their tenant"
 ON booking_requests FOR SELECT

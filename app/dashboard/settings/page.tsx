@@ -89,7 +89,6 @@ export default function SettingsPage() {
           whatsapp_number: formData.whatsapp_number,
         })
         .eq('id', tenantId);
-        .eq('id', tenantId);
 
       if (error) throw error;
       alert('Settings saved successfully!');
