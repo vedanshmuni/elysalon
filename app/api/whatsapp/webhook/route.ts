@@ -99,6 +99,47 @@ async function getTenantByWhatsAppNumber(whatsappNumber: string): Promise<string
     const { data: tenant } = await supabase
       .from('tenants')
       .select('id, name')
+      .or(`whatsapp_number.eq.${whatsappNumber},whatsapp_number.eq.${cleanNumber},whatsapp_number.eq.+${cleanNumber}`)
+      .single();
+
+    if (tenant) {
+      console.log('Found tenant for WhatsApp number:', tenant.name);
+      return tenant.id;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error finding tenant by WhatsApp number:', error);
+    return null;
+  }
+}
+
+/**
+ * Handle incoming messages and send welcome menu
+ */
+async function handleIncomingMessage(phoneNumber: string, message: string, tenantId: string) {
+  const { sendInteractiveButtons } = await import('@/lib/whatsapp/client');
+  const supabase = await createClient();
+  
+  // Get salon name
+  const { data: tenant } = await supabase
+    .from('tenants')
+    .select('name')
+    .eq('id', tenantId)
+    .single();
+
+  const salonName = tenant?.name || 'our salon';
+  
+  await sendInteractiveButtons(phoneNumber, {
+    bodyText: `Hello! 👋 Welcome to ${salonName}!\n\nHow can we help you today?`,
+    buttons: [
+      { id: 'book_appointment', title: '📅 Book Appointment' },
+      { id: 'view_services', title: '💇 View Services' },
+      { id: 'contact_us', title: '📞 Contact Us' },
+    ],
+  });
+}
+
 /**
  * Handle booking requests from WhatsApp
  */
@@ -146,47 +187,6 @@ async function handleBookingRequest(phoneNumber: string, message: string, tenant
       })
       .select()
       .single();
-  const salonName = tenant?.name || 'our salon';
-  
-  await sendInteractiveButtons(phoneNumber, {
-    bodyText: `Hello! 👋 Welcome to ${salonName}!\n\nHow can we help you today?`,
-    buttons: [
-      { id: 'book_appointment', title: '📅 Book Appointment' },
-      { id: 'view_services', title: '💇 View Services' },
-      { id: 'contact_us', title: '📞 Contact Us' },
-    ],
-  });
-}
-
-/**
- * Handle booking requests from WhatsApp
- */
-async function handleBookingRequest(phoneNumber: string, message: string, tenantId: string) {
-  try {
-    const supabase = await createClient();
-    const { sendTextMessage } = await import('@/lib/whatsapp/client');
-
-    // Try to find existing client by phone
-    const { data: clients } = await supabase
-      .from('clients')
-      .select('id, full_name, tenant_id, tenants(name, whatsapp_number)')
-      .eq('phone', phoneNumber);
-
-    const client = clients?.[0];
-
-    // Create a booking request entry
-    const { data: request, error } = await supabase
-      .from('booking_requests')
-      .insert({
-        client_id: client?.id,
-        phone_number: phoneNumber,
-        message: message,
-        status: 'PENDING',
-        source: 'WHATSAPP',
-        requested_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
 
     if (error) throw error;
 
@@ -195,6 +195,24 @@ async function handleBookingRequest(phoneNumber: string, message: string, tenant
       phoneNumber,
       `✅ Your booking request has been received!\n\nOur team will review it and get back to you shortly. You'll receive a confirmation once your appointment is approved.\n\nBooking Reference: ${request.id.slice(0, 8)}`
     );
+
+    // Notify salon owner/staff via dashboard (notification will appear in booking requests page)
+    console.log('Booking request created:', request);
+    
+    // If there's a tenant with WhatsApp, notify them
+    if (client?.tenants?.whatsapp_number) {
+      await sendNewBookingRequestNotification(client.tenants.whatsapp_number, {
+        clientName: client.full_name || 'New Customer',
+        clientPhone: phoneNumber,
+        serviceName: 'To be confirmed',
+        preferredDate: 'To be confirmed',
+        preferredTime: 'To be confirmed',
+      });
+    }
+  } catch (error) {
+    console.error('Error handling booking request:', error);
+  }
+}
 
 /**
  * Handle view services request
@@ -241,32 +259,39 @@ async function handleViewServices(phoneNumber: string, tenantId: string) {
     });
 
     // Build message
-    let message = `💇 Services at ${salonName}:\n\n`;
+    let messageText = `💇 Services at ${salonName}:\n\n`;
     
     Object.entries(servicesByCategory).forEach(([category, categoryServices]) => {
-      message += `*${category}*\n`;
+      messageText += `*${category}*\n`;
       categoryServices.forEach((service: any) => {
-        message += `• ${service.name}`;
+        messageText += `• ${service.name}`;
         if (service.base_price) {
-          message += ` - ₹${service.base_price}`;
+          messageText += ` - ₹${service.base_price}`;
         }
         if (service.duration_minutes) {
-          message += ` (${service.duration_minutes}min)`;
+          messageText += ` (${service.duration_minutes}min)`;
         }
-        message += `\n`;
+        messageText += `\n`;
         if (service.description) {
-          message += `  ${service.description}\n`;
+          messageText += `  ${service.description}\n`;
         }
       });
-      message += `\n`;
+      messageText += `\n`;
     });
 
-    message += `Book an appointment to experience our services! ✨`;
+    messageText += `Book an appointment to experience our services! ✨`;
 
-    await sendTextMessage(phoneNumber, message);
+    await sendTextMessage(phoneNumber, messageText);
   } catch (error) {
     console.error('Error fetching services:', error);
     await sendTextMessage(
+      phoneNumber,
+      `💇 Our Services:\n\n` +
+      `Please contact us or book an appointment to see our full service menu! ✨`
+    );
+  }
+}
+
 /**
  * Handle contact us request
  */
@@ -298,11 +323,4 @@ async function handleContactUs(phoneNumber: string, tenantId: string) {
   contactMessage += `\nFeel free to reach out to us for any queries!\n\nWe're here to help! 💙`;
   
   await sendTextMessage(phoneNumber, contactMessage);
-} 
-  await sendTextMessage(
-    phoneNumber,
-    `📞 Contact Us:\n\n` +
-    `Feel free to reach out to us for any queries!\n\n` +
-    `We're here to help! 💙`
-  );
 }

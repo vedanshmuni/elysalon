@@ -77,6 +77,7 @@ export default function SettingsPage() {
   async function handleSave() {
     setLoading(true);
     try {
+      const supabase = createClient();
       const { error } = await supabase
         .from('tenants')
         .update({
