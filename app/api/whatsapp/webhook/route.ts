@@ -95,18 +95,46 @@ async function getTenantByWhatsAppNumber(whatsappNumber: string): Promise<string
     
     if (!cleanNumber) return null;
 
-    // Find tenant by WhatsApp number
-    const { data: tenant } = await supabase
+    console.log('Looking for tenant with WhatsApp number:', {
+      original: whatsappNumber,
+      cleaned: cleanNumber
+    });
+
+    // Find tenant by WhatsApp number - try exact match first
+    let { data: tenant, error } = await supabase
       .from('tenants')
-      .select('id, name')
-      .or(`whatsapp_number.eq.${whatsappNumber},whatsapp_number.eq.${cleanNumber},whatsapp_number.eq.+${cleanNumber}`)
+      .select('id, name, whatsapp_number')
+      .eq('whatsapp_number', cleanNumber)
       .single();
 
+    // If not found, try with + prefix
+    if (!tenant && !error) {
+      const result = await supabase
+        .from('tenants')
+        .select('id, name, whatsapp_number')
+        .eq('whatsapp_number', `+${cleanNumber}`)
+        .single();
+      tenant = result.data;
+      error = result.error;
+    }
+
+    // If still not found, try original format
+    if (!tenant && !error && whatsappNumber !== cleanNumber) {
+      const result = await supabase
+        .from('tenants')
+        .select('id, name, whatsapp_number')
+        .eq('whatsapp_number', whatsappNumber)
+        .single();
+      tenant = result.data;
+      error = result.error;
+    }
+
     if (tenant) {
-      console.log('Found tenant for WhatsApp number:', tenant.name);
+      console.log('✅ Found tenant for WhatsApp number:', tenant.name, 'with number:', tenant.whatsapp_number);
       return tenant.id;
     }
 
+    console.log('❌ No tenant found. Checked:', cleanNumber, `+${cleanNumber}`, whatsappNumber);
     return null;
   } catch (error) {
     console.error('Error finding tenant by WhatsApp number:', error);
