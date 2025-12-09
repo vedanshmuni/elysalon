@@ -41,18 +41,24 @@ function getPhoneVariations(phone: string): string[] {
  * Required by Meta to verify your webhook endpoint
  */
 export async function GET(request: NextRequest) {
+  console.log('🔔 GET /api/whatsapp/webhook - Verification request received');
+  
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get('hub.mode');
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
+  console.log('Verification params:', { mode, token, challenge: challenge?.substring(0, 20) });
+
   const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'elysalon_verify_token';
+  console.log('Expected token:', VERIFY_TOKEN);
 
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('Webhook verified successfully!');
+    console.log('✅ Webhook verified successfully!');
     return new NextResponse(challenge, { status: 200 });
   }
 
+  console.log('❌ Verification failed - token mismatch');
   return NextResponse.json({ error: 'Verification failed' }, { status: 403 });
 }
 
@@ -61,11 +67,17 @@ export async function GET(request: NextRequest) {
  * Receives incoming messages from WhatsApp
  */
 export async function POST(request: NextRequest) {
-  console.log('\n========== WHATSAPP WEBHOOK ==========');
+  // Log immediately to confirm webhook is being hit
+  console.log('\n🚨🚨🚨 WEBHOOK HIT 🚨🚨🚨');
+  console.log('========== WHATSAPP WEBHOOK POST ==========');
   console.log('Time:', new Date().toISOString());
+  console.log('Headers:', Object.fromEntries(request.headers.entries()));
 
   try {
-    const body = await request.json();
+    const rawBody = await request.text();
+    console.log('📦 Raw body received:', rawBody.substring(0, 500));
+    
+    const body = JSON.parse(rawBody);
     
     // WhatsApp sends status updates and messages
     const value = body.entry?.[0]?.changes?.[0]?.value;
