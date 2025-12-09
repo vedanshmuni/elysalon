@@ -269,3 +269,128 @@ Please check your dashboard to accept or decline this booking.`;
 
   return sendTextMessage(salonPhoneNumber, message);
 }
+
+/**
+ * Send broadcast message (offer/promotion) to multiple clients
+ * This function handles single message send - use in a loop for bulk sends
+ */
+export async function sendBroadcastMessage(
+  phoneNumber: string,
+  broadcastDetails: {
+    title: string;
+    message: string;
+    imageUrl?: string;
+  }
+) {
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+  const fullMessage = `${broadcastDetails.title}\n\n${broadcastDetails.message}`;
+
+  // If image URL is provided, send with image
+  if (broadcastDetails.imageUrl) {
+    try {
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
+
+      if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+        console.error('WhatsApp credentials not configured');
+        throw new Error('WhatsApp integration not configured');
+      }
+
+      // Send image with caption
+      const response = await fetch(
+        `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: cleanPhone,
+            type: 'image',
+            image: {
+              link: broadcastDetails.imageUrl,
+              caption: fullMessage,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('WhatsApp API Error:', error);
+        throw new Error(`WhatsApp API error: ${error.error?.message || 'Unknown error'}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error sending broadcast with image:', error);
+      // Fallback to text-only if image fails
+      return sendTextMessage(cleanPhone, fullMessage);
+    }
+  }
+
+  // Send text-only message
+  return sendTextMessage(cleanPhone, fullMessage);
+}
+
+/**
+ * Send offer/promotion template message (if you have approved templates)
+ */
+export async function sendOfferTemplate(
+  phoneNumber: string,
+  templateName: string,
+  parameters: string[]
+) {
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+
+  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+    console.error('WhatsApp credentials not configured');
+    throw new Error('WhatsApp integration not configured');
+  }
+
+  try {
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: cleanPhone,
+          type: 'template',
+          template: {
+            name: templateName,
+            language: {
+              code: 'en_US',
+            },
+            components: [
+              {
+                type: 'body',
+                parameters: parameters.map(param => ({
+                  type: 'text',
+                  text: param,
+                })),
+              },
+            ],
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('WhatsApp Template API Error:', error);
+      throw new Error(`WhatsApp API error: ${error.error?.message || 'Unknown error'}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error sending offer template:', error);
+    throw error;
+  }
+}

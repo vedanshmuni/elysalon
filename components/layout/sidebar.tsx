@@ -16,6 +16,7 @@ import {
   Mail,
   LogOut,
   MessageSquare,
+  Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/helpers';
 
@@ -30,6 +31,7 @@ const navigation = [
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
   { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart },
   { name: 'Marketing', href: '/dashboard/marketing', icon: Mail },
+  { name: 'WhatsApp Broadcasts', href: '/dashboard/broadcasts', icon: Send },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];

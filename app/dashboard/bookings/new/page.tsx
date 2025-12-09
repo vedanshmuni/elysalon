@@ -245,6 +245,48 @@ export default function NewBookingPage() {
         throw new Error(itemsError.message || 'Failed to create booking items');
       }
 
+      // Send WhatsApp confirmation to client if they have a phone number
+      if (clientId) {
+        try {
+          const { data: client } = await supabase
+            .from('clients')
+            .select('full_name, phone')
+            .eq('id', clientId)
+            .single();
+
+          if (client && client.phone) {
+            // Get service and branch details for confirmation message
+            const selectedService = services.find((s) => s.id === bookingItems[0].service_id);
+            const selectedBranch = branches.find((b) => b.id === formData.branch_id);
+
+            if (selectedService && selectedBranch) {
+              const { sendBookingConfirmation } = await import('@/lib/whatsapp/client');
+              
+              await sendBookingConfirmation(client.phone, {
+                clientName: client.full_name,
+                serviceName: selectedService.name,
+                date: new Date(scheduledStart).toLocaleDateString('en-IN', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric',
+                }),
+                time: new Date(scheduledStart).toLocaleTimeString('en-IN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+                branch: selectedBranch.name,
+              });
+              
+              console.log('WhatsApp confirmation sent successfully');
+            }
+          }
+        } catch (whatsappError) {
+          console.error('Failed to send WhatsApp confirmation:', whatsappError);
+          // Don't fail the booking creation if WhatsApp fails
+        }
+      }
+
       alert('Booking created successfully!');
       router.push('/dashboard/bookings');
       router.refresh();
