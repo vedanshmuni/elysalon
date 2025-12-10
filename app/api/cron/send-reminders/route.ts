@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { sendBookingReminder } from '@/lib/whatsapp/client';
 
 /**
- * Cron job to send booking reminders 1 hour before appointment
+ * Cron job to send booking reminders 2 hours before appointment
  * Set up a cron trigger to call this endpoint every 15 minutes
  * 
  * For Render: Add a Cron Job pointing to: https://your-app.onrender.com/api/cron/send-reminders
@@ -22,12 +21,12 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     
     // Get bookings that are:
-    // 1. Starting in the next 60-75 minutes (to catch them in the window)
+    // 1. Starting in the next 120-135 minutes (2 hours window, to catch them)
     // 2. Not cancelled
     // 3. Haven't had reminder sent yet
     const now = new Date();
-    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
-    const oneHour15Later = new Date(now.getTime() + 75 * 60 * 1000);
+    const twoHoursLater = new Date(now.getTime() + 120 * 60 * 1000);
+    const twoHours15Later = new Date(now.getTime() + 135 * 60 * 1000);
 
     const { data: bookings, error } = await supabase
       .from('bookings')
@@ -41,16 +40,20 @@ export async function GET(request: NextRequest) {
           phone
         ),
         branch:branches (
-          name
+          name,
+          address
         ),
         booking_items (
           service:services (
             name
+          ),
+          staff:staff (
+            display_name
           )
         )
       `)
-      .gte('scheduled_start', oneHourLater.toISOString())
-      .lte('scheduled_start', oneHour15Later.toISOString())
+      .gte('scheduled_start', twoHoursLater.toISOString())
+      .lte('scheduled_start', twoHours15Later.toISOString())
       .eq('reminder_sent', false)
       .neq('status', 'CANCELLED')
       .neq('status', 'NO_SHOW');
@@ -81,18 +84,40 @@ export async function GET(request: NextRequest) {
           .filter(Boolean)
           .join(', ') || 'Service';
 
+        const staffName = booking.booking_items?.[0]?.staff?.display_name;
+
         const scheduledTime = new Date(booking.scheduled_start);
-        const timeString = scheduledTime.toLocaleTimeString('en-US', {
+        const dateString = scheduledTime.toLocaleDateString('en-IN', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          timeZone: 'Asia/Kolkata'
+        });
+        const timeString = scheduledTime.toLocaleTimeString('en-IN', {
           hour: '2-digit',
           minute: '2-digit',
+          hour12: true,
+          timeZone: 'Asia/Kolkata'
         });
 
-        await sendBookingReminder(booking.client.phone, {
-          clientName: booking.client.full_name || 'Valued Customer',
-          serviceName,
-          time: timeString,
-          branch: booking.branch?.name || 'Our Location',
-        });
+        // Send WhatsApp reminder message
+        const reminderMessage = 
+          `⏰ *Appointment Reminder*\n\n` +
+          `Hi ${booking.client.full_name || 'there'}! 👋\n\n` +
+          `This is a friendly reminder about your upcoming appointment in 2 hours:\n\n` +
+          `📋 *Booking Details:*\n` +
+          `💇 Service: ${serviceName}\n` +
+          (staffName ? `👤 Staff: ${staffName}\n` : '') +
+          `📅 Date: ${dateString}\n` +
+          `🕐 Time: ${timeString}\n` +
+          (booking.branch?.address ? `📍 Location: ${booking.branch.address}\n` : '') +
+          `\n⏱ *Please arrive 10 minutes early.*\n\n` +
+          `If you need to reschedule or cancel, please contact us as soon as possible.\n\n` +
+          `See you soon! 😊`;
+
+        // Use sendTextMessage directly with custom message
+        const { sendTextMessage } = await import('@/lib/whatsapp/client');
+        await sendTextMessage(booking.client.phone, reminderMessage);
 
         // Update booking to mark reminder as sent
         await supabase
