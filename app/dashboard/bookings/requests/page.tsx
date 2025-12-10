@@ -120,6 +120,10 @@ export default function BookingRequestsPage() {
 
       // Create booking datetime
       const bookingDateTime = `${selectedRequest.parsed_date}T${selectedRequest.parsed_time}:00+05:30`;
+      
+      // Calculate end time
+      const startTime = new Date(bookingDateTime);
+      const endTime = new Date(startTime.getTime() + service.duration_minutes * 60000);
 
       // Create booking
       const { data: booking, error: bookingError } = await supabase
@@ -128,9 +132,8 @@ export default function BookingRequestsPage() {
           tenant_id: tenantId,
           client_id: selectedRequest.client_id,
           branch_id: branch?.id,
-          scheduled_at: bookingDateTime,
-          total_duration_minutes: service.duration_minutes,
-          estimated_total: service.base_price,
+          scheduled_start: bookingDateTime,
+          scheduled_end: endTime.toISOString(),
           status: 'CONFIRMED',
           source: 'WHATSAPP',
           notes: `WhatsApp booking request ID: ${selectedRequest.id}`
@@ -144,10 +147,12 @@ export default function BookingRequestsPage() {
       await supabase
         .from('booking_items')
         .insert({
+          tenant_id: tenantId,
           booking_id: booking.id,
           service_id: service.id,
           staff_id: selectedStaffId,
-          duration_minutes: service.duration_minutes
+          duration_minutes: service.duration_minutes,
+          price: service.base_price
         });
 
       // Update request status
