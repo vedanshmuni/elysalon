@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendInvoicePDF } from '@/lib/whatsapp/client';
+import { generateInvoicePDF } from '../generate-pdf/route';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,19 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate PDF and upload to Supabase Storage
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const generateResponse = await fetch(`${baseUrl}/api/invoices/generate-pdf`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ invoiceId })
-    });
-
-    if (!generateResponse.ok) {
-      const errorData = await generateResponse.json();
-      throw new Error(errorData.error || 'Failed to generate PDF');
-    }
-
-    const { pdfUrl } = await generateResponse.json();
+    const { pdfUrl } = await generateInvoicePDF(invoiceId);
 
     // Send invoice via WhatsApp with PDF URL
     const result = await sendInvoicePDF(

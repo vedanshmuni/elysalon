@@ -2,15 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import puppeteer from 'puppeteer';
 
-export async function POST(request: NextRequest) {
-  try {
-    const { invoiceId } = await request.json();
-
-    if (!invoiceId) {
-      return NextResponse.json({ error: 'Invoice ID is required' }, { status: 400 });
-    }
-
-    const supabase = await createClient();
+/**
+ * Generate and upload invoice PDF to Supabase Storage
+ */
+export async function generateInvoicePDF(invoiceId: string) {
+  const supabase = await createClient();
 
     // Get invoice with all details
     const { data: invoice, error: invoiceError } = await supabase
@@ -82,13 +78,29 @@ export async function POST(request: NextRequest) {
       .from('invoices')
       .getPublicUrl(fileName);
 
-    return NextResponse.json({
+    return {
       success: true,
       pdfUrl: publicUrl,
       fileName
-    });
+    };
   } catch (error: any) {
     console.error('Error generating invoice PDF:', error);
+    throw error;
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const { invoiceId } = await request.json();
+
+    if (!invoiceId) {
+      return NextResponse.json({ error: 'Invoice ID is required' }, { status: 400 });
+    }
+
+    const result = await generateInvoicePDF(invoiceId);
+    return NextResponse.json(result);
+  } catch (error: any) {
+    console.error('Error in generate-pdf route:', error);
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
