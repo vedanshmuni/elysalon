@@ -123,8 +123,14 @@ export default function BookingRequestsPage() {
       const [hours, minutes] = selectedRequest.parsed_time!.split(':').map(Number);
       const dateStr = selectedRequest.parsed_date!;
       
-      // Create date in IST (Asia/Kolkata timezone)
-      const startTime = new Date(`${dateStr}T${selectedRequest.parsed_time}:00+05:30`);
+      // Parse date components
+      const [year, month, day] = dateStr.split('-').map(Number);
+      
+      // Create date in UTC, then adjust for IST offset (UTC+5:30)
+      // IST is 5.5 hours ahead of UTC, so we subtract to get UTC time
+      const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+      const localDate = new Date(year, month - 1, day, hours, minutes, 0);
+      const startTime = new Date(localDate.getTime() - istOffset);
       const endTime = new Date(startTime.getTime() + service.duration_minutes * 60000);
 
       // Create booking
