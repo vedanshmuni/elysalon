@@ -603,6 +603,7 @@ async function confirmBooking(from: string, serviceId: string, date: string, tim
     // Find or create client
     const phoneVariations = getPhoneVariations(from);
     let clientId = null;
+    let existingClient = null;
     
     for (const variation of phoneVariations) {
       const { data } = await supabase
@@ -614,7 +615,35 @@ async function confirmBooking(from: string, serviceId: string, date: string, tim
 
       if (data) {
         clientId = data.id;
+        existingClient = data;
         break;
+      }
+    }
+
+    // If client doesn't exist, create one with WhatsApp profile name
+    if (!clientId) {
+      // Get default branch
+      const { data: branch } = await supabase
+        .from('branches')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .limit(1)
+        .single();
+
+      const { data: newClient } = await supabase
+        .from('clients')
+        .insert({
+          tenant_id: tenantId,
+          branch_id: branch?.id,
+          full_name: profileName || 'WhatsApp Customer',
+          phone: from,
+          source: 'WHATSAPP'
+        })
+        .select('id')
+        .single();
+
+      if (newClient) {
+        clientId = newClient.id;
       }
     }
 
