@@ -101,15 +101,9 @@ export async function GET(request: NextRequest) {
  * Receives incoming messages from WhatsApp
  */
 export async function POST(request: NextRequest) {
-  // Log immediately to confirm webhook is being hit
-  console.log('\n🚨🚨🚨 WEBHOOK HIT 🚨🚨🚨');
-  console.log('========== WHATSAPP WEBHOOK POST ==========');
-  console.log('Time:', new Date().toISOString());
-  console.log('Headers:', Object.fromEntries(request.headers.entries()));
-
   try {
     const rawBody = await request.text();
-    console.log('📦 Raw body received:', rawBody.substring(0, 500));
+    console.log('📦 Raw body received:', rawBody);
     
     const body = JSON.parse(rawBody);
     
@@ -117,19 +111,16 @@ export async function POST(request: NextRequest) {
     const value = body.entry?.[0]?.changes?.[0]?.value;
     
     if (!value) {
-      console.log('No value in webhook - status update or other');
       return NextResponse.json({ status: 'received' }, { status: 200 });
     }
 
     // Check for status updates
     if (value.statuses) {
-      console.log('Status update received - ignoring');
       return NextResponse.json({ status: 'received' }, { status: 200 });
     }
 
     // Process incoming messages
     if (!value.messages || value.messages.length === 0) {
-      console.log('No messages in payload');
       return NextResponse.json({ status: 'received' }, { status: 200 });
     }
 
@@ -138,23 +129,17 @@ export async function POST(request: NextRequest) {
     const messageType = message.type;
     const profileName = value.contacts?.[0]?.profile?.name || 'Customer';
 
-    console.log('📱 Message from:', from, '| Name:', profileName, '| Type:', messageType);
-
     // Get tenant ID - use env variable or fetch from database
     const tenantId = await getTenantId();
     
     if (!tenantId) {
-      console.error('❌ No tenant configured! Set DEFAULT_TENANT_ID env variable');
+      console.error('❌ No tenant configured');
       return NextResponse.json({ status: 'received' }, { status: 200 });
     }
-
-    console.log('✅ Using tenant:', tenantId);
 
     // Handle different message types
     if (messageType === 'text') {
       const messageBody = message.text?.body || '';
-      console.log('💬 Text message:', messageBody);
-      
       await handleTextMessage(from, messageBody, profileName, tenantId);
     } 
     else if (messageType === 'interactive') {
@@ -162,17 +147,14 @@ export async function POST(request: NextRequest) {
       
       if (interactive?.type === 'button_reply') {
         const buttonId = interactive.button_reply?.id;
-        console.log('🔘 Button click:', buttonId);
         await handleButtonClick(from, buttonId, profileName, tenantId);
       }
       else if (interactive?.type === 'list_reply') {
         const listId = interactive.list_reply?.id;
-        console.log('📋 List selection:', listId);
         await handleListSelection(from, listId, profileName, tenantId);
       }
     }
 
-    console.log('✅ Webhook processed\n');
     return NextResponse.json({ status: 'received' }, { status: 200 });
   } catch (error: any) {
     console.error('❌ Webhook error:', error.message);
@@ -276,7 +258,15 @@ async function sendWelcomeMenu(from: string, profileName: string, tenantId: stri
  * Handle button clicks
  */
 async function handleButtonClick(from: string, buttonId: string, profileName: string, tenantId: string) {
-  console.log('Button clicked:', buttonId);
+  // Handle period selection buttons
+  if (buttonId.startsWith('period_')) {
+    const parts = buttonId.split('_');
+    const period = parts[1]; // morning, afternoon, evening
+    const date = parts[2];
+    const serviceId = parts[3];
+    await sendTimeSlotSelection(from, serviceId, date, period, tenantId);
+    return;
+  }
   
   switch (buttonId) {
     case 'book_appointment':
@@ -311,12 +301,6 @@ async function handleListSelection(from: string, listId: string, profileName: st
     const date = parts[1]; // YYYY-MM-DD format
     const serviceId = parts[2];
     await sendTimeSlotPeriodSelection(from, serviceId, date, tenantId);
-  } else if (listId.startsWith('period_')) {
-    const parts = listId.split('_');
-    const period = parts[1]; // morning, afternoon, evening
-    const date = parts[2];
-    const serviceId = parts[3];
-    await sendTimeSlotSelection(from, serviceId, date, period, tenantId);
   } else if (listId.startsWith('time_')) {
     const parts = listId.split('_');
     const time = parts[1]; // HH:MM format
