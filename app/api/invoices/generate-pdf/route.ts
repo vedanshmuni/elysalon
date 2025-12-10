@@ -201,14 +201,14 @@ export async function generateInvoicePDF(invoiceId: string) {
         font: regularFont
       });
       
-      page.drawText(`₹${Number(item.unit_price).toFixed(2)}`, {
+      page.drawText(`Rs.${Number(item.unit_price).toFixed(2)}`, {
         x: width - 190,
         y: yPosition,
         size: 10,
         font: regularFont
       });
       
-      page.drawText(`₹${Number(item.total).toFixed(2)}`, {
+      page.drawText(`Rs.${Number(item.total).toFixed(2)}`, {
         x: width - 120,
         y: yPosition,
         size: 10,
@@ -237,7 +237,7 @@ export async function generateInvoicePDF(invoiceId: string) {
       font: regularFont
     });
     
-    page.drawText(`₹${Number(invoice.subtotal).toFixed(2)}`, {
+    page.drawText(`Rs.${Number(invoice.subtotal).toFixed(2)}`, {
       x: width - 120,
       y: yPosition,
       size: 10,
@@ -254,7 +254,7 @@ export async function generateInvoicePDF(invoiceId: string) {
         font: regularFont
       });
       
-      page.drawText(`-₹${Number(invoice.discount_amount).toFixed(2)}`, {
+      page.drawText(`-Rs.${Number(invoice.discount_amount).toFixed(2)}`, {
         x: width - 120,
         y: yPosition,
         size: 10,
@@ -271,7 +271,7 @@ export async function generateInvoicePDF(invoiceId: string) {
       font: regularFont
     });
     
-    page.drawText(`₹${Number(invoice.tax_amount).toFixed(2)}`, {
+    page.drawText(`Rs.${Number(invoice.tax_amount).toFixed(2)}`, {
       x: width - 120,
       y: yPosition,
       size: 10,
@@ -295,7 +295,7 @@ export async function generateInvoicePDF(invoiceId: string) {
       font: boldFont
     });
     
-    page.drawText(`₹${Number(invoice.total).toFixed(2)}`, {
+    page.drawText(`Rs.${Number(invoice.total).toFixed(2)}`, {
       x: width - 120,
       y: yPosition - 5,
       size: 12,
