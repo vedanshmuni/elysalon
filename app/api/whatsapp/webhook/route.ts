@@ -258,16 +258,6 @@ async function sendWelcomeMenu(from: string, profileName: string, tenantId: stri
  * Handle button clicks
  */
 async function handleButtonClick(from: string, buttonId: string, profileName: string, tenantId: string) {
-  // Handle period selection buttons
-  if (buttonId.startsWith('period_')) {
-    const parts = buttonId.split('_');
-    const period = parts[1]; // morning, afternoon, evening
-    const date = parts[2];
-    const serviceId = parts[3];
-    await sendTimeSlotSelection(from, serviceId, date, period, tenantId);
-    return;
-  }
-  
   switch (buttonId) {
     case 'book_appointment':
       await sendServicesListInteractive(from, tenantId);
@@ -301,6 +291,12 @@ async function handleListSelection(from: string, listId: string, profileName: st
     const date = parts[1]; // YYYY-MM-DD format
     const serviceId = parts[2];
     await sendTimeSlotPeriodSelection(from, serviceId, date, tenantId);
+  } else if (listId.startsWith('period_')) {
+    const parts = listId.split('_');
+    const period = parts[1]; // morning, afternoon, evening
+    const date = parts[2];
+    const serviceId = parts[3];
+    await sendTimeSlotSelection(from, serviceId, date, period, tenantId);
   } else if (listId.startsWith('time_')) {
     const parts = listId.split('_');
     const time = parts[1]; // HH:MM format
@@ -441,7 +437,7 @@ async function sendDateSelection(from: string, serviceId: string, tenantId: stri
 }
 
 /**
- * Send time period selection (Morning/Afternoon/Evening) as buttons
+ * Send time period selection (Morning/Afternoon/Evening) as list
  */
 async function sendTimeSlotPeriodSelection(from: string, serviceId: string, date: string, tenantId: string) {
   try {
@@ -460,16 +456,20 @@ async function sendTimeSlotPeriodSelection(from: string, serviceId: string, date
       timeZone: 'Asia/Kolkata'
     });
 
-    // Send 3 buttons for time period selection
-    await sendInteractiveButtons(from, {
-      headerText: service?.name || 'Select Time Period',
+    // Send list for time period selection
+    await sendInteractiveList(from, {
+      headerText: service?.name || 'Select Time',
       bodyText: `Choose your preferred time for ${dateDisplay}:`,
-      buttons: [
-        { id: `period_morning_${date}_${serviceId}`, title: '☀️ Morning' },
-        { id: `period_afternoon_${date}_${serviceId}`, title: '🌤️ Afternoon' },
-        { id: `period_evening_${date}_${serviceId}`, title: '🌙 Evening' }
-      ],
-      footerText: 'Morning: 10 AM-12 PM | Afternoon: 12-5 PM | Evening: 5-9 PM'
+      buttonText: 'Select Period',
+      footerText: 'All times in IST',
+      sections: [{
+        title: 'Time Periods',
+        rows: [
+          { id: `period_morning_${date}_${serviceId}`, title: '☀️ Morning', description: '10 AM - 12 PM' },
+          { id: `period_afternoon_${date}_${serviceId}`, title: '🌤️ Afternoon', description: '12 PM - 5 PM' },
+          { id: `period_evening_${date}_${serviceId}`, title: '🌙 Evening', description: '5 PM - 9 PM' }
+        ]
+      }]
     });
 
     console.log('✅ Period selection sent to', from);
@@ -503,19 +503,23 @@ async function sendTimeSlotSelection(from: string, serviceId: string, date: stri
     let startHour = 10;
     let endHour = 21;
     let periodName = '';
+    let periodDisplay = '';
 
     if (period === 'morning') {
       startHour = 10;
       endHour = 12;
-      periodName = '☀️ Morning (10 AM - 12 PM)';
+      periodName = '☀️ Morning';
+      periodDisplay = '10 AM - 12 PM';
     } else if (period === 'afternoon') {
       startHour = 12;
       endHour = 17;
-      periodName = '🌤️ Afternoon (12 PM - 5 PM)';
+      periodName = '🌤️ Afternoon';
+      periodDisplay = '12 PM - 5 PM';
     } else if (period === 'evening') {
       startHour = 17;
       endHour = 21;
-      periodName = '🌙 Evening (5 PM - 9 PM)';
+      periodName = '🌙 Evening';
+      periodDisplay = '5 PM - 9 PM';
     }
 
     // Generate time slots for the period
@@ -537,7 +541,7 @@ async function sendTimeSlotSelection(from: string, serviceId: string, date: stri
 
     await sendInteractiveList(from, {
       headerText: service?.name || 'Select Time',
-      bodyText: `${periodName} slots for ${dateDisplay}:`,
+      bodyText: `${periodDisplay} slots for ${dateDisplay}:`,
       buttonText: 'Choose Time',
       footerText: 'All times in IST',
       sections: [{
