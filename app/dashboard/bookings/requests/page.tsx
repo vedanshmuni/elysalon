@@ -173,11 +173,49 @@ export default function BookingRequestsPage() {
         })
         .eq('id', selectedRequest.id);
 
+      // Get staff name for confirmation message
+      const { data: staffData } = await supabase
+        .from('staff')
+        .select('display_name')
+        .eq('id', selectedStaffId)
+        .single();
+
+      // Format date and time for message
+      const bookingDate = new Date(selectedRequest.parsed_date!);
+      const dateDisplay = bookingDate.toLocaleDateString('en-IN', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+      const timeDisplay = selectedRequest.parsed_time;
+
+      // Send WhatsApp confirmation
+      await fetch('/api/whatsapp/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: selectedRequest.phone_number,
+          message: `✅ *Booking Confirmed!*\n\n` +
+            `Hi ${selectedRequest.client?.full_name || 'there'}! Your appointment has been confirmed.\n\n` +
+            `📋 *Booking Details:*\n` +
+            `💇 Service: ${selectedRequest.parsed_service}\n` +
+            `📅 Date: ${dateDisplay}\n` +
+            `🕐 Time: ${timeDisplay} IST\n` +
+            `👤 Staff: ${staffData?.display_name}\n` +
+            `⏱ Duration: ${service.duration_minutes} mins\n` +
+            `💰 Price: ₹${service.base_price}\n\n` +
+            `⏰ *Please arrive 10 minutes before your scheduled time.*\n\n` +
+            `📍 We look forward to serving you!\n` +
+            `For any changes, please contact us directly. Thank you! 🙏`
+        })
+      });
+
       // Reload requests
       loadRequests();
       setSelectedRequest(null);
       setSelectedStaffId('');
-      alert('Booking confirmed successfully!');
+      alert('Booking confirmed and customer notified!');
     } catch (error) {
       console.error('Error confirming booking:', error);
       alert('Failed to confirm booking');
@@ -193,6 +231,17 @@ export default function BookingRequestsPage() {
 
   async function handleDecline(requestId: string) {
     const supabase = createClient();
+    
+    // Get request details before declining
+    const { data: request } = await supabase
+      .from('booking_requests')
+      .select(`
+        *,
+        client:clients(full_name)
+      `)
+      .eq('id', requestId)
+      .single();
+
     const { error } = await supabase
       .from('booking_requests')
       .update({
@@ -201,7 +250,31 @@ export default function BookingRequestsPage() {
       })
       .eq('id', requestId);
 
-    if (!error) {
+    if (!error && request) {
+      // Format date for message
+      const bookingDate = request.parsed_date ? new Date(request.parsed_date) : null;
+      const dateDisplay = bookingDate ? bookingDate.toLocaleDateString('en-IN', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
+      }) : 'the requested date';
+
+      // Send WhatsApp decline notification
+      await fetch('/api/whatsapp/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: request.phone_number,
+          message: `🙏 *Booking Request Update*\n\n` +
+            `Hi ${request.client?.full_name || 'there'},\n\n` +
+            `We're sorry, but we're unable to confirm your appointment request for ${dateDisplay}${request.parsed_time ? ` at ${request.parsed_time}` : ''}.\n\n` +
+            `${request.parsed_service ? `Service: ${request.parsed_service}\n\n` : ''}` +
+            `😊 *We'd love to serve you at a different time!*\n\n` +
+            `Please reply with "book" to see our available slots, or call us directly to schedule your appointment.\n\n` +
+            `Thank you for your understanding! 💙`
+        })
+      });
+
       loadRequests();
     }
   }
