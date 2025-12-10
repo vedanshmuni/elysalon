@@ -310,7 +310,13 @@ async function handleListSelection(from: string, listId: string, profileName: st
     const parts = listId.split('_');
     const date = parts[1]; // YYYY-MM-DD format
     const serviceId = parts[2];
-    await sendTimeSlotSelection(from, serviceId, date, tenantId);
+    await sendTimeSlotPeriodSelection(from, serviceId, date, tenantId);
+  } else if (listId.startsWith('period_')) {
+    const parts = listId.split('_');
+    const period = parts[1]; // morning, afternoon, evening
+    const date = parts[2];
+    const serviceId = parts[3];
+    await sendTimeSlotSelection(from, serviceId, date, period, tenantId);
   } else if (listId.startsWith('time_')) {
     const parts = listId.split('_');
     const time = parts[1]; // HH:MM format
@@ -451,11 +457,10 @@ async function sendDateSelection(from: string, serviceId: string, tenantId: stri
 }
 
 /**
- * Send time slot selection (10 AM to 9 PM, 30-min slots, IST)
+ * Send time period selection (Morning/Afternoon/Evening)
  */
-async function sendTimeSlotSelection(from: string, serviceId: string, date: string, tenantId: string) {
+async function sendTimeSlotPeriodSelection(from: string, serviceId: string, date: string, tenantId: string) {
   try {
-    // Get service details
     const supabase = createServiceRoleClient();
     const { data: service } = await supabase
       .from('services')
@@ -463,12 +468,38 @@ async function sendTimeSlotSelection(from: string, serviceId: string, date: stri
       .eq('id', serviceId)
       .single();
 
-    // Generate time slots in IST (max 10 per section due to WhatsApp limit)
-    const timeSlots = [];
+    const dateObj = new Date(date + 'T00:00:00');
+    const dateDisplay = dateObj.toLocaleDateString('en-IN', { 
+      weekday: 'long', 
+      day: 'numeric', 
+      month: 'short',
+      timeZone: 'Asia/Kolkata'
+    });
 
-    // Generate all slots from 10 AM to 9 PM
-    for (let hour = 10; hour <= 21; hour++) {
+    // Generate time slots based on selected period
+    const timeSlots = [];
+    let startHour = 10;
+    let endHour = 21;
+    let periodName = '';
+
+    if (period === 'morning') {
+      startHour = 10;
+      endHour = 12;
+      periodName = '☀️ Morning (10 AM - 12 PM)';
+    } else if (period === 'afternoon') {
+      startHour = 12;
+      endHour = 17;
+      periodName = '☀️ Afternoon (12 PM - 5 PM)';
+    } else if (period === 'evening') {
+      startHour = 17;
+      endHour = 21;
+      periodName = '🌙 Evening (5 PM - 9 PM)';
+    }
+
+    // Generate slots for the selected period
+    for (let hour = startHour; hour <= endHour; hour++) {
       for (let min = 0; min < 60; min += 30) {
+        if (hour === endHour && min > 0) break;
         if (hour === 21 && min > 0) break; // Stop at 9:00 PM
         
         const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
@@ -476,22 +507,31 @@ async function sendTimeSlotSelection(from: string, serviceId: string, date: stri
         const ampm = hour >= 12 ? 'PM' : 'AM';
         const display = `${display12}:${min === 0 ? '00' : min} ${ampm}`;
         
-        // Categorize into time periods
-        let period = '';
-        if (hour < 12) period = '☀️ Morning';
-        else if (hour < 17) period = '☀️ Afternoon';
-        else period = '🌙 Evening';
-        
         timeSlots.push({
           id: `time_${time}_${date}_${serviceId}`,
           title: display,
-          description: period
+          description: `Available`
         });
       }
     }
 
-    const dateObj = new Date(date + 'T00:00:00');
-    const dateDisplay = dateObj.toLocaleDateString('en-IN', { 
+    await sendInteractiveList(from, {
+      headerText: service?.name || 'Select Time',
+      bodyText: `${periodName} slots for ${dateDisplay}:`,
+      buttonText: 'Choose Time',
+      footerText: 'All times in IST',
+      sections: [{
+        title: periodName,
+        rows: timeSlots.slice(0, 10)
+      }]
+    });
+
+    console.log('✅ Time slots sent to', from);
+  } catch (error) {
+    console.error('Error sending time slots:', error);
+    await sendTextMessage(from, 'Unable to show time slots. Please try again.');
+  }
+}   const dateDisplay = dateObj.toLocaleDateString('en-IN', { 
       weekday: 'long', 
       day: 'numeric', 
       month: 'short',
