@@ -6,7 +6,8 @@ import puppeteer from 'puppeteer';
  * Generate and upload invoice PDF to Supabase Storage
  */
 export async function generateInvoicePDF(invoiceId: string) {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
     // Get invoice with all details
     const { data: invoice, error: invoiceError } = await supabase
