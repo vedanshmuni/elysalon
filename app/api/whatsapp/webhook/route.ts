@@ -128,6 +128,8 @@ export async function POST(request: NextRequest) {
     const from = message.from;
     const messageType = message.type;
     const profileName = value.contacts?.[0]?.profile?.name || 'Customer';
+    
+    console.log('📱 Message from:', from, '| Profile name:', profileName);
 
     // Get tenant ID - use env variable or fetch from database
     const tenantId = await getTenantId();
@@ -604,6 +606,7 @@ async function confirmBooking(from: string, serviceId: string, date: string, tim
     const phoneVariations = getPhoneVariations(from);
     let clientId = null;
     let existingClient = null;
+    let clientName = profileName || 'WhatsApp Customer';
     
     for (const variation of phoneVariations) {
       const { data } = await supabase
@@ -616,12 +619,15 @@ async function confirmBooking(from: string, serviceId: string, date: string, tim
       if (data) {
         clientId = data.id;
         existingClient = data;
+        clientName = data.full_name;
         break;
       }
     }
 
     // If client doesn't exist, create one with WhatsApp profile name
     if (!clientId) {
+      console.log('🆕 Creating new client with name:', profileName, 'for phone:', from);
+      
       // Get default branch
       const { data: branch } = await supabase
         .from('branches')
@@ -630,22 +636,34 @@ async function confirmBooking(from: string, serviceId: string, date: string, tim
         .limit(1)
         .single();
 
-      const { data: newClient } = await supabase
+      const { data: newClient, error: clientError } = await supabase
         .from('clients')
         .insert({
           tenant_id: tenantId,
           branch_id: branch?.id,
           full_name: profileName || 'WhatsApp Customer',
           phone: from,
-          source: 'WHATSAPP'
+          consent_whatsapp: true,
+          notes: 'Client created via WhatsApp booking'
         })
-        .select('id')
+        .select('id, full_name')
         .single();
 
-      if (newClient) {
+      if (clientError) {
+        console.error('❌ Error creating client:', clientError);
+        // Still try to create booking request without client_id (will show as Unknown)
+        clientId = null;
+      } else if (newClient) {
+        console.log('✅ Created new client:', newClient.full_name, 'with ID:', newClient.id);
         clientId = newClient.id;
+        clientName = newClient.full_name;
       }
+    } else {
+      console.log('✅ Found existing client ID:', clientId, 'Name:', existingClient?.full_name);
     }
+    
+    // Log what we're about to insert
+    console.log('📝 Creating booking request with client_id:', clientId, 'client_name:', clientName);
 
     // Parse date and time to create booking datetime (IST)
     const bookingDateTime = `${date}T${time}:00+05:30`; // IST timezone

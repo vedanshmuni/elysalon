@@ -65,7 +65,7 @@ export default function BookingRequestsPage() {
       .from('booking_requests')
       .select(`
         *,
-        client:clients(full_name)
+        client:clients!client_id(full_name)
       `)
       .eq('tenant_id', tid)
       .order('requested_at', { ascending: false });
