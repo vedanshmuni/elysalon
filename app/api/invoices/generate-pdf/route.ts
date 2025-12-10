@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import puppeteer from 'puppeteer';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 /**
  * Generate and upload invoice PDF to Supabase Storage
@@ -38,46 +38,295 @@ export async function generateInvoicePDF(invoiceId: string) {
       .single();
 
     if (invoiceError || !invoice) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+      throw new Error('Invoice not found');
     }
 
-    // Generate HTML for PDF
-    const invoiceHTML = generateInvoiceHTML(invoice);
-
-    // Generate PDF using Puppeteer (uses bundled Chromium)
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--single-process',
-        '--no-zygote'
-      ]
+    // Create PDF document
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595, 842]); // A4 size
+    const { width, height } = page.getSize();
+    
+    // Load fonts
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    
+    let yPosition = height - 50;
+    
+    // Header - Business Name
+    page.drawText(invoice.tenant?.name || 'Salon', {
+      x: 50,
+      y: yPosition,
+      size: 24,
+      font: boldFont,
+      color: rgb(0.15, 0.39, 0.92)
     });
-    const page = await browser.newPage();
-    await page.setContent(invoiceHTML, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' }
+    
+    yPosition -= 25;
+    
+    // Branch details
+    if (invoice.branch) {
+      page.drawText(invoice.branch.name || '', {
+        x: 50,
+        y: yPosition,
+        size: 10,
+        font: regularFont
+      });
+      yPosition -= 15;
+      
+      if (invoice.branch.address) {
+        page.drawText(invoice.branch.address, {
+          x: 50,
+          y: yPosition,
+          size: 10,
+          font: regularFont
+        });
+        yPosition -= 15;
+      }
+      
+      if (invoice.branch.phone) {
+        page.drawText(`Phone: ${invoice.branch.phone}`, {
+          x: 50,
+          y: yPosition,
+          size: 10,
+          font: regularFont
+        });
+      }
+    }
+    
+    // Invoice number and date (top right)
+    page.drawText('INVOICE', {
+      x: width - 150,
+      y: height - 50,
+      size: 20,
+      font: boldFont
     });
-    await browser.close();
+    
+    page.drawText(`#${invoice.invoice_number}`, {
+      x: width - 150,
+      y: height - 75,
+      size: 12,
+      font: boldFont
+    });
+    
+    const invoiceDate = new Date(invoice.issued_at || invoice.created_at).toLocaleDateString('en-IN');
+    page.drawText(`Date: ${invoiceDate}`, {
+      x: width - 150,
+      y: height - 95,
+      size: 10,
+      font: regularFont
+    });
+    
+    yPosition = height - 170;
+    
+    // Client details
+    page.drawText('BILL TO:', {
+      x: 50,
+      y: yPosition,
+      size: 10,
+      font: boldFont
+    });
+    yPosition -= 20;
+    
+    page.drawText(invoice.client?.full_name || 'Walk-in Customer', {
+      x: 50,
+      y: yPosition,
+      size: 12,
+      font: regularFont
+    });
+    yPosition -= 15;
+    
+    if (invoice.client?.phone) {
+      page.drawText(`Phone: ${invoice.client.phone}`, {
+        x: 50,
+        y: yPosition,
+        size: 10,
+        font: regularFont
+      });
+    }
+    
+    yPosition -= 40;
+    
+    // Table header
+    page.drawRectangle({
+      x: 50,
+      y: yPosition - 20,
+      width: width - 100,
+      height: 25,
+      color: rgb(0.95, 0.95, 0.95)
+    });
+    
+    page.drawText('Description', {
+      x: 60,
+      y: yPosition - 10,
+      size: 10,
+      font: boldFont
+    });
+    
+    page.drawText('Qty', {
+      x: width - 250,
+      y: yPosition - 10,
+      size: 10,
+      font: boldFont
+    });
+    
+    page.drawText('Price', {
+      x: width - 190,
+      y: yPosition - 10,
+      size: 10,
+      font: boldFont
+    });
+    
+    page.drawText('Total', {
+      x: width - 120,
+      y: yPosition - 10,
+      size: 10,
+      font: boldFont
+    });
+    
+    yPosition -= 35;
+    
+    // Invoice items
+    for (const item of invoice.invoice_items) {
+      page.drawText(item.name, {
+        x: 60,
+        y: yPosition,
+        size: 10,
+        font: regularFont
+      });
+      
+      page.drawText(item.quantity.toString(), {
+        x: width - 250,
+        y: yPosition,
+        size: 10,
+        font: regularFont
+      });
+      
+      page.drawText(`₹${Number(item.unit_price).toFixed(2)}`, {
+        x: width - 190,
+        y: yPosition,
+        size: 10,
+        font: regularFont
+      });
+      
+      page.drawText(`₹${Number(item.total).toFixed(2)}`, {
+        x: width - 120,
+        y: yPosition,
+        size: 10,
+        font: regularFont
+      });
+      
+      yPosition -= 20;
+    }
+    
+    yPosition -= 20;
+    
+    // Totals
+    page.drawLine({
+      start: { x: width - 200, y: yPosition },
+      end: { x: width - 50, y: yPosition },
+      thickness: 1,
+      color: rgb(0, 0, 0)
+    });
+    
+    yPosition -= 20;
+    
+    page.drawText('Subtotal:', {
+      x: width - 190,
+      y: yPosition,
+      size: 10,
+      font: regularFont
+    });
+    
+    page.drawText(`₹${Number(invoice.subtotal).toFixed(2)}`, {
+      x: width - 120,
+      y: yPosition,
+      size: 10,
+      font: regularFont
+    });
+    
+    yPosition -= 20;
+    
+    if (invoice.discount_amount > 0) {
+      page.drawText('Discount:', {
+        x: width - 190,
+        y: yPosition,
+        size: 10,
+        font: regularFont
+      });
+      
+      page.drawText(`-₹${Number(invoice.discount_amount).toFixed(2)}`, {
+        x: width - 120,
+        y: yPosition,
+        size: 10,
+        font: regularFont
+      });
+      
+      yPosition -= 20;
+    }
+    
+    page.drawText('GST (18%):', {
+      x: width - 190,
+      y: yPosition,
+      size: 10,
+      font: regularFont
+    });
+    
+    page.drawText(`₹${Number(invoice.tax_amount).toFixed(2)}`, {
+      x: width - 120,
+      y: yPosition,
+      size: 10,
+      font: regularFont
+    });
+    
+    yPosition -= 30;
+    
+    // Grand total
+    page.drawLine({
+      start: { x: width - 200, y: yPosition + 10 },
+      end: { x: width - 50, y: yPosition + 10 },
+      thickness: 2,
+      color: rgb(0, 0, 0)
+    });
+    
+    page.drawText('Total:', {
+      x: width - 190,
+      y: yPosition - 5,
+      size: 12,
+      font: boldFont
+    });
+    
+    page.drawText(`₹${Number(invoice.total).toFixed(2)}`, {
+      x: width - 120,
+      y: yPosition - 5,
+      size: 12,
+      font: boldFont
+    });
+    
+    // Footer
+    page.drawText('Thank you for your business!', {
+      x: 50,
+      y: 60,
+      size: 10,
+      font: regularFont,
+      color: rgb(0.5, 0.5, 0.5)
+    });
+    
+    // Generate PDF buffer
+    const pdfBytes = await pdfDoc.save();
 
     // Upload PDF to Supabase Storage
     const fileName = `invoice-${invoice.invoice_number}-${Date.now()}.pdf`;
     const { data: uploadData, error: uploadError } = await supabase
       .storage
       .from('invoices')
-      .upload(fileName, pdfBuffer, {
+      .upload(fileName, pdfBytes, {
         contentType: 'application/pdf',
         upsert: false
       });
 
     if (uploadError) {
       console.error('Error uploading PDF to storage:', uploadError);
-      throw new Error('Failed to upload PDF');
+      throw new Error(`Failed to upload PDF: ${uploadError.message}`);
     }
 
     // Get public URL
@@ -85,6 +334,8 @@ export async function generateInvoicePDF(invoiceId: string) {
       .storage
       .from('invoices')
       .getPublicUrl(fileName);
+
+    console.log('✅ PDF generated and uploaded:', publicUrl);
 
     return {
       success: true,

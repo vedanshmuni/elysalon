@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendTextMessage, sendWhatsAppMessage } from '@/lib/whatsapp/client';
+import { generateInvoicePDF } from '../generate-pdf/route';
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,14 +53,6 @@ export async function POST(request: NextRequest) {
       `• ${item.name} x${item.quantity} - ₹${Number(item.total).toFixed(2)}`
     ).join('\n');
 
-    // Generate PDF link (opens in browser, prints to PDF)
-    // Use NEXT_PUBLIC_APP_URL, fallback to production URL
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-    if (!appUrl || appUrl.includes('localhost')) {
-      throw new Error('NEXT_PUBLIC_APP_URL environment variable must be set to your production URL');
-    }
-    const pdfLink = `${appUrl}/dashboard/pos/history?invoice=${invoice.id}&print=true`;
-
     const invoiceText = `🧾 *INVOICE #${invoice.invoice_number}*\n\n` +
       `📅 Date: ${invoiceDate}\n` +
       `👤 Customer: ${client.full_name || 'Walk-in'}\n\n` +
@@ -77,12 +70,15 @@ export async function POST(request: NextRequest) {
     // Send text invoice first
     await sendTextMessage(client.phone, invoiceText);
 
-    // Send PDF as document attachment
+    // Generate PDF and upload to Supabase Storage
+    const { pdfUrl } = await generateInvoicePDF(invoiceId);
+
+    // Send PDF as document attachment using public Supabase Storage URL
     await sendWhatsAppMessage({
       to: client.phone,
       type: 'document',
       document: {
-        link: pdfLink,
+        link: pdfUrl,
         filename: `Invoice_${invoice.invoice_number}.pdf`,
         caption: `Invoice #${invoice.invoice_number}`
       }
