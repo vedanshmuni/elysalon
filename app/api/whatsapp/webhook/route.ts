@@ -463,49 +463,29 @@ async function sendTimeSlotSelection(from: string, serviceId: string, date: stri
       .eq('id', serviceId)
       .single();
 
-    // Generate time slots in IST
-    const morning = [];
-    const afternoon = [];
-    const evening = [];
+    // Generate time slots in IST (max 10 per section due to WhatsApp limit)
+    const timeSlots = [];
 
-    // Morning: 10:00 - 11:30
-    for (let hour = 10; hour < 12; hour++) {
-      for (let min = 0; min < 60; min += 30) {
-        const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-        const display = `${hour}:${min === 0 ? '00' : min} ${hour < 12 ? 'AM' : 'PM'}`;
-        morning.push({
-          id: `time_${time}_${date}_${serviceId}`,
-          title: display,
-          description: '☀️ Morning'
-        });
-      }
-    }
-
-    // Afternoon: 12:00 - 17:00 (12 PM - 5 PM)
-    for (let hour = 12; hour < 17; hour++) {
-      for (let min = 0; min < 60; min += 30) {
-        const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-        const display12 = hour > 12 ? hour - 12 : hour;
-        const display = `${display12}:${min === 0 ? '00' : min} PM`;
-        afternoon.push({
-          id: `time_${time}_${date}_${serviceId}`,
-          title: display,
-          description: '☀️ Afternoon'
-        });
-      }
-    }
-
-    // Evening: 17:00 - 21:00 (5 PM - 9 PM)
-    for (let hour = 17; hour <= 21; hour++) {
+    // Generate all slots from 10 AM to 9 PM
+    for (let hour = 10; hour <= 21; hour++) {
       for (let min = 0; min < 60; min += 30) {
         if (hour === 21 && min > 0) break; // Stop at 9:00 PM
+        
         const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-        const display12 = hour > 12 ? hour - 12 : hour;
-        const display = `${display12}:${min === 0 ? '00' : min} PM`;
-        evening.push({
+        const display12 = hour > 12 ? hour - 12 : (hour === 12 ? 12 : hour);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const display = `${display12}:${min === 0 ? '00' : min} ${ampm}`;
+        
+        // Categorize into time periods
+        let period = '';
+        if (hour < 12) period = '☀️ Morning';
+        else if (hour < 17) period = '☀️ Afternoon';
+        else period = '🌙 Evening';
+        
+        timeSlots.push({
           id: `time_${time}_${date}_${serviceId}`,
           title: display,
-          description: '🌙 Evening'
+          description: period
         });
       }
     }
@@ -518,7 +498,11 @@ async function sendTimeSlotSelection(from: string, serviceId: string, date: stri
       timeZone: 'Asia/Kolkata'
     });
 
-    // WhatsApp lists support max 10 items per section, so split into 3 sections
+    // Split into 3 sections with max 9 rows each (staying under 10 limit)
+    const morning = timeSlots.filter(slot => slot.description === '☀️ Morning');
+    const afternoon = timeSlots.filter(slot => slot.description === '☀️ Afternoon');
+    const evening = timeSlots.filter(slot => slot.description === '🌙 Evening');
+
     await sendInteractiveList(from, {
       headerText: service?.name || 'Select Time',
       bodyText: `Choose your preferred time on ${dateDisplay}:`,
@@ -527,17 +511,17 @@ async function sendTimeSlotSelection(from: string, serviceId: string, date: stri
       sections: [
         {
           title: '☀️ Morning (10 AM - 12 PM)',
-          rows: morning.slice(0, 10)
+          rows: morning.slice(0, 9)
         },
         {
           title: '☀️ Afternoon (12 PM - 5 PM)',
-          rows: afternoon.slice(0, 10)
+          rows: afternoon.slice(0, 9)
         },
         {
           title: '🌙 Evening (5 PM - 9 PM)',
-          rows: evening.slice(0, 10)
+          rows: evening.slice(0, 9)
         }
-      ]
+      ].filter(section => section.rows.length > 0)
     });
 
     console.log('✅ Time slots sent to', from);
