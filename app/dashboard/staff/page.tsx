@@ -61,6 +61,12 @@ export default async function StaffPage() {
           <p className="text-muted-foreground">Manage team members and schedules</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/dashboard/staff/attendance">
+            <Button variant="outline" size="sm">
+              <Users className="mr-2 h-4 w-4" />
+              Attendance
+            </Button>
+          </Link>
           <Link href="/dashboard/staff/commissions">
             <Button variant="outline" size="sm">
               <DollarSign className="mr-2 h-4 w-4" />

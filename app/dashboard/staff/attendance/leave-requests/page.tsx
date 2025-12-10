@@ -1,0 +1,392 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Calendar, Check, X, Plus, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+
+export default function LeaveRequestsPage() {
+  const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
+  const [leaveTypes, setLeaveTypes] = useState<any[]>([]);
+  const [staff, setStaff] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showNewRequest, setShowNewRequest] = useState(false);
+  const [tenantId, setTenantId] = useState<string>('');
+
+  const [formData, setFormData] = useState({
+    staff_id: '',
+    leave_type_id: '',
+    start_date: '',
+    end_date: '',
+    reason: '',
+  });
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('default_tenant_id')
+        .eq('id', user.id)
+        .single();
+
+      const tid = profile?.default_tenant_id;
+      if (!tid) return;
+      setTenantId(tid);
+
+      // Load leave requests
+      const { data: requests } = await supabase
+        .from('staff_leave_requests')
+        .select(`
+          *,
+          staff:staff(id, display_name, phone),
+          leave_type:leave_types(name, color, paid),
+          reviewed_by:profiles(email)
+        `)
+        .eq('tenant_id', tid)
+        .order('requested_at', { ascending: false });
+
+      setLeaveRequests(requests || []);
+
+      // Load leave types
+      const { data: types } = await supabase
+        .from('leave_types')
+        .select('*')
+        .eq('tenant_id', tid)
+        .eq('is_active', true);
+
+      setLeaveTypes(types || []);
+
+      // Load staff
+      const { data: staffList } = await supabase
+        .from('staff')
+        .select('id, display_name')
+        .eq('tenant_id', tid)
+        .eq('is_active', true);
+
+      setStaff(staffList || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tenantId) return;
+
+    try {
+      // Calculate total days
+      const start = new Date(formData.start_date);
+      const end = new Date(formData.end_date);
+      const diffTime = Math.abs(end.getTime() - start.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+      const { error } = await supabase.from('staff_leave_requests').insert({
+        tenant_id: tenantId,
+        staff_id: formData.staff_id,
+        leave_type_id: formData.leave_type_id,
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        total_days: diffDays,
+        reason: formData.reason,
+        status: 'pending',
+      });
+
+      if (error) throw error;
+
+      alert('Leave request created successfully!');
+      setShowNewRequest(false);
+      setFormData({
+        staff_id: '',
+        leave_type_id: '',
+        start_date: '',
+        end_date: '',
+        reason: '',
+      });
+      loadData();
+    } catch (error) {
+      console.error('Error creating leave request:', error);
+      alert('Failed to create leave request');
+    }
+  }
+
+  async function updateLeaveStatus(requestId: string, status: 'approved' | 'rejected', notes?: string) {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const { error } = await supabase
+        .from('staff_leave_requests')
+        .update({
+          status,
+          reviewed_by: user?.id,
+          reviewed_at: new Date().toISOString(),
+          review_notes: notes || null,
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      alert(`Leave request ${status}!`);
+      loadData();
+    } catch (error) {
+      console.error('Error updating leave status:', error);
+      alert('Failed to update leave request');
+    }
+  }
+
+  if (loading) {
+    return <div className="p-8 text-center">Loading...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/staff/attendance">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Leave Requests</h1>
+            <p className="text-muted-foreground">Manage staff leave requests</p>
+          </div>
+        </div>
+        <Button onClick={() => setShowNewRequest(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          New Leave Request
+        </Button>
+      </div>
+
+      {/* New Leave Request Form */}
+      {showNewRequest && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Create Leave Request</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="staff">Staff Member *</Label>
+                  <select
+                    id="staff"
+                    required
+                    value={formData.staff_id}
+                    onChange={(e) => setFormData({ ...formData, staff_id: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Select staff member</option>
+                    {staff.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <Label htmlFor="leave_type">Leave Type *</Label>
+                  <select
+                    id="leave_type"
+                    required
+                    value={formData.leave_type_id}
+                    onChange={(e) => setFormData({ ...formData, leave_type_id: e.target.value })}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Select leave type</option>
+                    {leaveTypes.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.name} {!type.paid && '(Unpaid)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <Label htmlFor="start_date">Start Date *</Label>
+                  <Input
+                    id="start_date"
+                    type="date"
+                    required
+                    value={formData.start_date}
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="end_date">End Date *</Label>
+                  <Input
+                    id="end_date"
+                    type="date"
+                    required
+                    value={formData.end_date}
+                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <Label htmlFor="reason">Reason *</Label>
+                  <Textarea
+                    id="reason"
+                    required
+                    value={formData.reason}
+                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                    placeholder="Provide reason for leave"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button type="submit">Create Request</Button>
+                <Button type="button" variant="outline" onClick={() => setShowNewRequest(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Leave Requests Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>All Leave Requests</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Staff Member</TableHead>
+                <TableHead>Leave Type</TableHead>
+                <TableHead>Start Date</TableHead>
+                <TableHead>End Date</TableHead>
+                <TableHead>Days</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {leaveRequests.length > 0 ? (
+                leaveRequests.map((request) => (
+                  <TableRow key={request.id}>
+                    <TableCell className="font-medium">
+                      {request.staff?.display_name || 'Unknown'}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium"
+                        style={{
+                          backgroundColor: `${request.leave_type?.color}20`,
+                          color: request.leave_type?.color,
+                        }}
+                      >
+                        {request.leave_type?.name}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {new Date(request.start_date).toLocaleDateString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      {new Date(request.end_date).toLocaleDateString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </TableCell>
+                    <TableCell>{request.total_days}</TableCell>
+                    <TableCell>
+                      <div className="max-w-[200px] truncate" title={request.reason}>
+                        {request.reason}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                          request.status === 'approved'
+                            ? 'bg-green-100 text-green-800'
+                            : request.status === 'rejected'
+                            ? 'bg-red-100 text-red-800'
+                            : request.status === 'cancelled'
+                            ? 'bg-gray-100 text-gray-800'
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}
+                      >
+                        {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {request.status === 'pending' && (
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-green-600 hover:text-green-700"
+                            onClick={() => updateLeaveStatus(request.id, 'approved')}
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                            onClick={() => {
+                              const notes = prompt('Rejection reason (optional):');
+                              updateLeaveStatus(request.id, 'rejected', notes || undefined);
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    No leave requests found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
