@@ -79,82 +79,6 @@ export async function sendTextMessage(phoneNumber: string, message: string) {
 }
 
 /**
- * Send interactive buttons via WhatsApp
- */
-export async function sendInteractiveButtons(
-  phoneNumber: string,
-  options: {
-    bodyText: string;
-    buttons: Array<{ id: string; title: string }>;
-    headerText?: string;
-    footerText?: string;
-  }
-) {
-  const cleanPhone = phoneNumber.replace(/\D/g, '');
-
-  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
-    console.error('WhatsApp credentials not configured');
-    throw new Error('WhatsApp integration not configured');
-  }
-
-  try {
-    const response = await fetch(
-      `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanPhone,
-          type: 'interactive',
-          interactive: {
-            type: 'button',
-            body: {
-              text: options.bodyText,
-            },
-            ...(options.headerText && {
-              header: {
-                type: 'text',
-                text: options.headerText,
-              },
-            }),
-            ...(options.footerText && {
-              footer: {
-                text: options.footerText,
-              },
-            }),
-            action: {
-              buttons: options.buttons.slice(0, 3).map(btn => ({
-                type: 'reply',
-                reply: {
-                  id: btn.id,
-                  title: btn.title.slice(0, 20), // Max 20 chars
-                },
-              })),
-            },
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('WhatsApp API Error:', error);
-      throw new Error(`WhatsApp API error: ${error.error?.message || 'Unknown error'}`);
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error sending interactive buttons:', error);
-    throw error;
-  }
-}
-
-/**
  * Send booking confirmation message
  */
 export async function sendBookingConfirmation(
@@ -333,6 +257,174 @@ export async function sendBroadcastMessage(
 
   // Send text-only message
   return sendTextMessage(cleanPhone, fullMessage);
+}
+
+/**
+ * Send interactive buttons (max 3 buttons)
+ */
+export async function sendInteractiveButtons(
+  phoneNumber: string,
+  options: {
+    headerText?: string;
+    bodyText: string;
+    footerText?: string;
+    buttons: Array<{ id: string; title: string }>;
+  }
+) {
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+
+  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+    throw new Error('WhatsApp integration not configured');
+  }
+
+  const payload: any = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: cleanPhone,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: {
+        text: options.bodyText
+      },
+      action: {
+        buttons: options.buttons.slice(0, 3).map(btn => ({
+          type: 'reply',
+          reply: {
+            id: btn.id,
+            title: btn.title.substring(0, 20) // Max 20 chars
+          }
+        }))
+      }
+    }
+  };
+
+  if (options.headerText) {
+    payload.interactive.header = {
+      type: 'text',
+      text: options.headerText
+    };
+  }
+
+  if (options.footerText) {
+    payload.interactive.footer = {
+      text: options.footerText
+    };
+  }
+
+  try {
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('WhatsApp Interactive Error:', error);
+      throw new Error(`WhatsApp API error: ${error.error?.message || 'Unknown error'}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error sending interactive buttons:', error);
+    throw error;
+  }
+}
+
+/**
+ * Send interactive list (up to 10 items per section)
+ */
+export async function sendInteractiveList(
+  phoneNumber: string,
+  options: {
+    headerText?: string;
+    bodyText: string;
+    footerText?: string;
+    buttonText: string;
+    sections: Array<{
+      title?: string;
+      rows: Array<{
+        id: string;
+        title: string;
+        description?: string;
+      }>;
+    }>;
+  }
+) {
+  const cleanPhone = phoneNumber.replace(/\D/g, '');
+
+  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+    throw new Error('WhatsApp integration not configured');
+  }
+
+  const payload: any = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: cleanPhone,
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      body: {
+        text: options.bodyText
+      },
+      action: {
+        button: options.buttonText.substring(0, 20),
+        sections: options.sections.map(section => ({
+          title: section.title,
+          rows: section.rows.map(row => ({
+            id: row.id,
+            title: row.title.substring(0, 24), // Max 24 chars
+            description: row.description?.substring(0, 72) // Max 72 chars
+          }))
+        }))
+      }
+    }
+  };
+
+  if (options.headerText) {
+    payload.interactive.header = {
+      type: 'text',
+      text: options.headerText
+    };
+  }
+
+  if (options.footerText) {
+    payload.interactive.footer = {
+      text: options.footerText
+    };
+  }
+
+  try {
+    const response = await fetch(
+      `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('WhatsApp Interactive List Error:', error);
+      throw new Error(`WhatsApp API error: ${error.error?.message || 'Unknown error'}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error sending interactive list:', error);
+    throw error;
+  }
 }
 
 /**

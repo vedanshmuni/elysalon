@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/server';
-import { sendTextMessage, sendInteractiveButtons } from '@/lib/whatsapp/client';
+import { sendTextMessage, sendInteractiveButtons, sendInteractiveList } from '@/lib/whatsapp/client';
 
 // Default tenant ID from environment variable (simpler approach like elychat)
 const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID;
@@ -276,11 +276,11 @@ async function sendWelcomeMenu(from: string, profileName: string, tenantId: stri
  * Handle button clicks
  */
 async function handleButtonClick(from: string, buttonId: string, profileName: string, tenantId: string) {
+  console.log('Button clicked:', buttonId);
+  
   switch (buttonId) {
     case 'book_appointment':
-      await sendTextMessage(from, 
-        `Great! Let's book your appointment. 📅\n\nPlease tell us:\n1. What service would you like?\n2. Your preferred date and time?\n\nExample: "Haircut on Saturday at 3pm"`
-      );
+      await sendServicesListInteractive(from, tenantId);
       break;
     
     case 'view_services':
@@ -300,15 +300,71 @@ async function handleButtonClick(from: string, buttonId: string, profileName: st
  * Handle list selections
  */
 async function handleListSelection(from: string, listId: string, profileName: string, tenantId: string) {
-  // For future service selection handling
   console.log('List selection:', listId);
-  await sendTextMessage(from, 
-    `You selected: ${listId}\n\nPlease tell us your preferred date and time for this service.`
-  );
+  
+  // Parse selection type
+  if (listId.startsWith('service_')) {
+    const serviceId = listId.replace('service_', '');
+    await sendDateSelection(from, serviceId, tenantId);
+  } else if (listId.startsWith('date_')) {
+    const parts = listId.split('_');
+    const date = parts[1]; // YYYY-MM-DD format
+    const serviceId = parts[2];
+    await sendTimeSlotSelection(from, serviceId, date, tenantId);
+  } else if (listId.startsWith('time_')) {
+    const parts = listId.split('_');
+    const time = parts[1]; // HH:MM format
+    const date = parts[2];
+    const serviceId = parts[3];
+    await confirmBooking(from, serviceId, date, time, profileName, tenantId);
+  }
 }
 
 /**
- * Send list of services
+ * Send interactive services list for booking
+ */
+async function sendServicesListInteractive(from: string, tenantId: string) {
+  try {
+    const supabase = createServiceRoleClient();
+    const { data: services } = await supabase
+      .from('services')
+      .select('id, name, duration_minutes, base_price')
+      .eq('tenant_id', tenantId)
+      .eq('is_active', true)
+      .order('name')
+      .limit(10);
+
+    if (!services || services.length === 0) {
+      await sendTextMessage(from, 
+        'Our services menu is being updated. Please contact us directly! 📞'
+      );
+      return;
+    }
+
+    await sendInteractiveList(from, {
+      headerText: 'Book Appointment',
+      bodyText: 'Please select a service:',
+      buttonText: 'View Services',
+      footerText: 'Choose your preferred service',
+      sections: [{
+        title: 'Available Services',
+        rows: services.map(service => ({
+          id: `service_${service.id}`,
+          title: service.name,
+          description: `${service.duration_minutes}min • ₹${service.base_price}`
+        }))
+      }]
+    });
+
+    console.log('✅ Services list sent to', from);
+  } catch (error) {
+    console.error('Error sending services list:', error);
+    await sendTextMessage(from, 'Unable to load services. Please try again later.');
+  }
+}
+
+/**
+ * Send list of services (text only)
  */
 async function sendServicesList(from: string, tenantId: string) {
   try {
@@ -333,12 +389,161 @@ async function sendServicesList(from: string, tenantId: string) {
       message += `${index + 1}. *${service.name}*\n`;
       message += `   ⏱ ${service.duration_minutes} mins | ₹${service.base_price}\n\n`;
     });
-    message += 'Reply with "book [service name]" to make an appointment!';
+    message += 'Reply with "book" to make an appointment!';
 
     await sendTextMessage(from, message);
   } catch (error) {
     console.error('Error fetching services:', error);
     await sendTextMessage(from, 'Unable to load services. Please try again later.');
+  }
+}
+
+/**
+ * Send date selection (next 7 days from tomorrow)
+ */
+async function sendDateSelection(from: string, serviceId: string, tenantId: string) {
+  try {
+    // Get service details
+    const supabase = createServiceRoleClient();
+    const { data: service } = await supabase
+      .from('services')
+      .select('name')
+      .eq('id', serviceId)
+      .single();
+
+    // Generate next 7 days starting from tomorrow (IST)
+    const dates = [];
+    const now = new Date();
+    // Convert to IST
+    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+    const istNow = new Date(now.getTime() + istOffset);
+    
+    for (let i = 1; i <= 7; i++) {
+      const date = new Date(istNow);
+      date.setDate(date.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+      const dayName = date.toLocaleDateString('en-IN', { weekday: 'long', timeZone: 'Asia/Kolkata' });
+      const dateDisplay = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+      
+      dates.push({
+        id: `date_${dateStr}_${serviceId}`,
+        title: `${dayName}`,
+        description: dateDisplay
+      });
+    }
+
+    await sendInteractiveList(from, {
+      headerText: service?.name || 'Select Date',
+      bodyText: 'When would you like to book?',
+      buttonText: 'Choose Date',
+      footerText: 'Select your preferred date',
+      sections: [{
+        title: 'Available Dates',
+        rows: dates
+      }]
+    });
+
+    console.log('✅ Date selection sent to', from);
+  } catch (error) {
+    console.error('Error sending date selection:', error);
+    await sendTextMessage(from, 'Unable to show dates. Please try again.');
+  }
+}
+
+/**
+ * Send time slot selection (10 AM to 9 PM, 30-min slots, IST)
+ */
+async function sendTimeSlotSelection(from: string, serviceId: string, date: string, tenantId: string) {
+  try {
+    // Get service details
+    const supabase = createServiceRoleClient();
+    const { data: service } = await supabase
+      .from('services')
+      .select('name')
+      .eq('id', serviceId)
+      .single();
+
+    // Generate time slots in IST
+    const morning = [];
+    const afternoon = [];
+    const evening = [];
+
+    // Morning: 10:00 - 11:30
+    for (let hour = 10; hour < 12; hour++) {
+      for (let min = 0; min < 60; min += 30) {
+        const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+        const display = `${hour}:${min === 0 ? '00' : min} ${hour < 12 ? 'AM' : 'PM'}`;
+        morning.push({
+          id: `time_${time}_${date}_${serviceId}`,
+          title: display,
+          description: '☀️ Morning'
+        });
+      }
+    }
+
+    // Afternoon: 12:00 - 17:00 (12 PM - 5 PM)
+    for (let hour = 12; hour < 17; hour++) {
+      for (let min = 0; min < 60; min += 30) {
+        const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+        const display12 = hour > 12 ? hour - 12 : hour;
+        const display = `${display12}:${min === 0 ? '00' : min} PM`;
+        afternoon.push({
+          id: `time_${time}_${date}_${serviceId}`,
+          title: display,
+          description: '☀️ Afternoon'
+        });
+      }
+    }
+
+    // Evening: 17:00 - 21:00 (5 PM - 9 PM)
+    for (let hour = 17; hour <= 21; hour++) {
+      for (let min = 0; min < 60; min += 30) {
+        if (hour === 21 && min > 0) break; // Stop at 9:00 PM
+        const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+        const display12 = hour > 12 ? hour - 12 : hour;
+        const display = `${display12}:${min === 0 ? '00' : min} PM`;
+        evening.push({
+          id: `time_${time}_${date}_${serviceId}`,
+          title: display,
+          description: '🌙 Evening'
+        });
+      }
+    }
+
+    const dateObj = new Date(date + 'T00:00:00');
+    const dateDisplay = dateObj.toLocaleDateString('en-IN', { 
+      weekday: 'long', 
+      day: 'numeric', 
+      month: 'short',
+      timeZone: 'Asia/Kolkata'
+    });
+
+    // WhatsApp lists support max 10 items per section, so split into 3 sections
+    await sendInteractiveList(from, {
+      headerText: service?.name || 'Select Time',
+      bodyText: `Choose your preferred time on ${dateDisplay}:`,
+      buttonText: 'Choose Time',
+      footerText: 'All times in IST',
+      sections: [
+        {
+          title: '☀️ Morning (10 AM - 12 PM)',
+          rows: morning.slice(0, 10)
+        },
+        {
+          title: '☀️ Afternoon (12 PM - 5 PM)',
+          rows: afternoon.slice(0, 10)
+        },
+        {
+          title: '🌙 Evening (5 PM - 9 PM)',
+          rows: evening.slice(0, 10)
+        }
+      ]
+    });
+
+    console.log('✅ Time slots sent to', from);
+  } catch (error) {
+    console.error('Error sending time slots:', error);
+    await sendTextMessage(from, 'Unable to show time slots. Please try again.');
   }
 }
 
@@ -367,7 +572,109 @@ async function sendContactInfo(from: string, tenantId: string) {
 }
 
 /**
- * Handle booking requests
+ * Confirm and create booking
+ */
+async function confirmBooking(from: string, serviceId: string, date: string, time: string, profileName: string, tenantId: string) {
+  try {
+    const supabase = createServiceRoleClient();
+    
+    // Get service details
+    const { data: service } = await supabase
+      .from('services')
+      .select('name, duration_minutes, base_price')
+      .eq('id', serviceId)
+      .single();
+
+    if (!service) {
+      await sendTextMessage(from, 'Service not found. Please try booking again.');
+      return;
+    }
+
+    // Find or create client
+    const phoneVariations = getPhoneVariations(from);
+    let clientId = null;
+    
+    for (const variation of phoneVariations) {
+      const { data } = await supabase
+        .from('clients')
+        .select('id, full_name')
+        .eq('tenant_id', tenantId)
+        .eq('phone', variation)
+        .maybeSingle();
+
+      if (data) {
+        clientId = data.id;
+        break;
+      }
+    }
+
+    // Parse date and time to create booking datetime (IST)
+    const bookingDateTime = `${date}T${time}:00+05:30`; // IST timezone
+
+    // Format display
+    const dateObj = new Date(date + 'T00:00:00');
+    const dateDisplay = dateObj.toLocaleDateString('en-IN', { 
+      weekday: 'long', 
+      day: 'numeric', 
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata'
+    });
+
+    // Format time for display (convert 24h to 12h)
+    const [hours, minutes] = time.split(':');
+    const hour12 = parseInt(hours) > 12 ? parseInt(hours) - 12 : parseInt(hours);
+    const ampm = parseInt(hours) >= 12 ? 'PM' : 'AM';
+    const timeDisplay = `${hour12}:${minutes} ${ampm}`;
+
+    // Create booking request
+    const { data: request, error } = await supabase
+      .from('booking_requests')
+      .insert({
+        tenant_id: tenantId,
+        client_id: clientId,
+        phone_number: from,
+        message: `Service: ${service.name}\nDate: ${dateDisplay}\nTime: ${timeDisplay} IST`,
+        parsed_service: service.name,
+        parsed_date: date,
+        parsed_time: time,
+        status: 'PENDING',
+        source: 'WHATSAPP',
+        requested_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Send confirmation with details
+    await sendTextMessage(from, 
+      `✅ *Booking Request Confirmed!*\n\n` +
+      `Hi ${profileName}! Your appointment request has been submitted.\n\n` +
+      `📋 *Booking Details:*\n` +
+      `💇 Service: ${service.name}\n` +
+      `📅 Date: ${dateDisplay}\n` +
+      `🕐 Time: ${timeDisplay} IST\n` +
+      `⏱ Duration: ${service.duration_minutes} mins\n` +
+      `💰 Price: ₹${service.base_price}\n\n` +
+      `📝 Request ID: ${request.id.substring(0, 8)}\n\n` +
+      `Our team will review and confirm your appointment shortly. ` +
+      `You'll receive a confirmation message once approved!\n\n` +
+      `Thank you for choosing us! 🎉`
+    );
+
+    console.log('✅ Booking confirmed:', request.id);
+  } catch (error) {
+    console.error('Error confirming booking:', error);
+    await sendTextMessage(from, 
+      `We encountered an issue creating your booking. ` +
+      `Please call us directly or try again later. Sorry for the inconvenience! 🙏`
+    );
+  }
+}
+
+/**
+ * Handle booking requests (fallback text-based)
  */
 async function handleBookingRequest(from: string, message: string, profileName: string, tenantId: string) {
   try {
