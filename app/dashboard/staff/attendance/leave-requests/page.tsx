@@ -75,7 +75,11 @@ export default function LeaveRequestsPage() {
         .single();
 
       const tid = profile?.default_tenant_id;
-      if (!tid) return;
+      if (!tid) {
+        console.error('No tenant ID found for user');
+        return;
+      }
+      console.log('Loading leave requests for tenant:', tid);
       setTenantId(tid);
 
       // Get user's role
@@ -101,19 +105,47 @@ export default function LeaveRequestsPage() {
         setFormData(prev => ({ ...prev, staff_id: staffRecord.id }));
       }
 
-      // Load leave requests
-      const { data: requests } = await supabase
+      // Load leave requests - ultra-simple query first
+      console.log('Querying leave requests for tenant:', tid);
+      const { data: requests, error: requestsError } = await supabase
         .from('staff_leave_requests')
-        .select(`
-          *,
-          staff:staff(id, display_name, phone),
-          leave_type:leave_types(name, color, paid),
-          reviewer:profiles!staff_leave_requests_reviewed_by_fkey(full_name)
-        `)
+        .select('*')
         .eq('tenant_id', tid)
         .order('requested_at', { ascending: false });
 
-      setLeaveRequests(requests || []);
+      if (requestsError) {
+        console.error('Error loading leave requests:', requestsError);
+      } else {
+        console.log('Leave requests loaded:', requests?.length || 0, requests);
+      }
+      
+      // Now fetch related data separately if requests exist
+      if (requests && requests.length > 0) {
+        // Fetch staff names
+        const staffIds = [...new Set(requests.map(r => r.staff_id))];
+        const { data: staffData } = await supabase
+          .from('staff')
+          .select('id, display_name, phone')
+          .in('id', staffIds);
+        
+        // Fetch leave types
+        const leaveTypeIds = [...new Set(requests.map(r => r.leave_type_id))];
+        const { data: leaveTypeData } = await supabase
+          .from('leave_types')
+          .select('id, name, color, paid')
+          .in('id', leaveTypeIds);
+        
+        // Merge data
+        const mergedRequests = requests.map(req => ({
+          ...req,
+          staff: staffData?.find(s => s.id === req.staff_id) || null,
+          leave_type: leaveTypeData?.find(lt => lt.id === req.leave_type_id) || null,
+        }));
+        
+        setLeaveRequests(mergedRequests);
+      } else {
+        setLeaveRequests([]);
+      }
 
       // Load leave types
       const { data: types } = await supabase
@@ -255,6 +287,16 @@ export default function LeaveRequestsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Debug info - remove after fixing */}
+      <div className="p-4 bg-gray-100 rounded text-xs font-mono">
+        <div>Role: {userRole || '(empty)'}</div>
+        <div>isManager: {String(isManager)}</div>
+        <div>tenantId: {tenantId || '(empty)'}</div>
+        <div>currentStaffId: {currentStaffId || '(empty)'}</div>
+        <div>leaveRequests.length: {leaveRequests.length}</div>
+        <div>leaveTypes.length: {leaveTypes.length}</div>
+      </div>
+      
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/dashboard/staff/attendance">
@@ -517,9 +559,13 @@ export default function LeaveRequestsPage() {
                       >
                         {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                       </span>
-                      {request.reviewer?.full_name && (
+                      {request.reviewed_at && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          by {request.reviewer.full_name}
+                          {new Date(request.reviewed_at).toLocaleDateString('en-IN', {
+                            timeZone: 'Asia/Kolkata',
+                            day: 'numeric',
+                            month: 'short',
+                          })}
                         </p>
                       )}
                     </TableCell>
