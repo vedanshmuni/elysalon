@@ -53,7 +53,11 @@ export async function POST(request: NextRequest) {
       `• ${item.name} x${item.quantity} - ₹${Number(item.total).toFixed(2)}`
     ).join('\n');
 
-    const invoiceText = `🧾 *INVOICE #${invoice.invoice_number}*\n\n` +
+    // Generate PDF and upload to Supabase Storage
+    const { pdfUrl } = await generateInvoicePDF(invoiceId);
+
+    // Create invoice caption message
+    const caption = `🧾 *INVOICE #${invoice.invoice_number}*\n\n` +
       `📅 Date: ${invoiceDate}\n` +
       `👤 Customer: ${client.full_name || 'Walk-in'}\n\n` +
       `*Items:*\n${itemsList}\n\n` +
@@ -67,20 +71,14 @@ export async function POST(request: NextRequest) {
       `Thank you for your business! 🙏\n` +
       `We look forward to serving you again! 💇✨`;
 
-    // Send text invoice first
-    await sendTextMessage(client.phone, invoiceText);
-
-    // Generate PDF and upload to Supabase Storage
-    const { pdfUrl } = await generateInvoicePDF(invoiceId);
-
-    // Send PDF as document attachment using public Supabase Storage URL
+    // Send single message with PDF attached and full invoice details as caption
     await sendWhatsAppMessage({
       to: client.phone,
       type: 'document',
       document: {
         link: pdfUrl,
         filename: `Invoice_${invoice.invoice_number}.pdf`,
-        caption: `Invoice #${invoice.invoice_number}`
+        caption: caption
       }
     });
 

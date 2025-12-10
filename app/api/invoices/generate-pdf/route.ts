@@ -314,8 +314,11 @@ export async function generateInvoicePDF(invoiceId: string) {
     // Generate PDF buffer
     const pdfBytes = await pdfDoc.save();
 
-    // Upload PDF to Supabase Storage
-    const fileName = `invoice-${invoice.invoice_number}-${Date.now()}.pdf`;
+    // Upload PDF to Supabase Storage (organized by client)
+    const clientFolder = invoice.client?.full_name 
+      ? invoice.client.full_name.replace(/[^a-zA-Z0-9]/g, '_') 
+      : 'walk_in';
+    const fileName = `${clientFolder}/invoice-${invoice.invoice_number}-${Date.now()}.pdf`;
     const { data: uploadData, error: uploadError } = await supabase
       .storage
       .from('invoices')
