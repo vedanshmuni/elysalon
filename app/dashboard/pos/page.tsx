@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Plus, Trash2, Search, Receipt } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/currency';
 import Link from 'next/link';
+import { AccessGuard } from '@/components/auth/AccessGuard';
 
 interface Client {
   id: string;
@@ -376,6 +377,7 @@ export default function POSPage() {
   );
 
   return (
+    <AccessGuard allowedRoles={['SUPER_ADMIN', 'OWNER', 'MANAGER', 'CASHIER']}>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -639,6 +641,7 @@ export default function POSPage() {
         </div>
       </div>
     </div>
+    </AccessGuard>
   );
 }
 

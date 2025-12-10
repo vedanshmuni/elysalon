@@ -12,24 +12,13 @@ import {
 import { Plus, Mail, MessageSquare, Send, Users } from 'lucide-react';
 import Link from 'next/link';
 import { formatDate } from '@/lib/utils/date';
+import { requireRole, FEATURE_PERMISSIONS } from '@/lib/auth/roles';
 
 export default async function MarketingPage() {
+  // Require marketing access permission - redirects unauthorized users
+  const { tenantId } = await requireRole(FEATURE_PERMISSIONS.manageMarketing);
+  
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('default_tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  const tenantId = profile?.default_tenant_id;
-  if (!tenantId) return null;
 
   // Fetch campaigns
   const { data: campaigns } = await supabase

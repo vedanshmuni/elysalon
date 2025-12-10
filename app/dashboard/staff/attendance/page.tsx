@@ -91,6 +91,12 @@ export default async function AttendancePage() {
           <p className="text-muted-foreground">Track and manage staff attendance</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/dashboard/staff/attendance/clock">
+            <Button className="bg-green-600 hover:bg-green-700">
+              <Clock className="mr-2 h-4 w-4" />
+              Clock In / Out
+            </Button>
+          </Link>
           <Link href="/dashboard/staff/attendance/leave-requests">
             <Button variant="outline">
               <Calendar className="mr-2 h-4 w-4" />

@@ -9,8 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Send, Users, MessageSquare, Check, X, Loader2, Image as ImageIcon } from 'lucide-react';
+import { AccessGuard } from '@/components/auth/AccessGuard';
 
-export default function BroadcastsPage() {
+function BroadcastsContent() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [tenantId, setTenantId] = useState<string>('');
@@ -382,5 +383,13 @@ export default function BroadcastsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function BroadcastsPage() {
+  return (
+    <AccessGuard allowedRoles={['SUPER_ADMIN', 'OWNER', 'MANAGER']}>
+      <BroadcastsContent />
+    </AccessGuard>
   );
 }

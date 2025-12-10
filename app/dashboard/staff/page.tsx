@@ -12,24 +12,13 @@ import {
 import { Plus, Users, Calendar, DollarSign, Target } from 'lucide-react';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/utils/currency';
+import { requireRole, FEATURE_PERMISSIONS } from '@/lib/auth/roles';
 
 export default async function StaffPage() {
+  // Require staff management permission - redirects unauthorized users
+  const { tenantId } = await requireRole(FEATURE_PERMISSIONS.manageStaff);
+  
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('default_tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  const tenantId = profile?.default_tenant_id;
-  if (!tenantId) return null;
 
   // Fetch staff members
   const { data: staffMembers, error: staffError } = await supabase

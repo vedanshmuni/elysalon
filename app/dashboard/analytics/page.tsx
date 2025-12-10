@@ -2,24 +2,13 @@ import { createClient } from '@/lib/supabase/server';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DollarSign, Users, TrendingUp, Calendar, BarChart3 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils/currency';
+import { requireRole, FEATURE_PERMISSIONS } from '@/lib/auth/roles';
 
 export default async function AnalyticsPage() {
+  // Require analytics access permission - redirects unauthorized users
+  const { tenantId } = await requireRole(FEATURE_PERMISSIONS.viewAnalytics);
+  
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('default_tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  const tenantId = profile?.default_tenant_id;
-  if (!tenantId) return null;
 
   // Fetch analytics data
   const { data: invoices } = await supabase

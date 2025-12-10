@@ -19,50 +19,105 @@ import {
   Send,
   Briefcase,
   Store,
+  Clock,
+  User,
+  CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/helpers';
 import { useState, useEffect } from 'react';
 
+type UserRole = 'SUPER_ADMIN' | 'OWNER' | 'MANAGER' | 'STAFF' | 'CASHIER' | 'READ_ONLY';
+
+interface NavItem {
+  name: string;
+  href: string;
+  icon: any;
+  allowedRoles: UserRole[];
+}
+
 // Client-facing operations (front office)
-const clientOperations = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar },
-  { name: 'Booking Requests', href: '/dashboard/bookings/requests', icon: MessageSquare },
-  { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
-  { name: 'Clients', href: '/dashboard/clients', icon: Users },
-  { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart },
-  { name: 'Marketing', href: '/dashboard/marketing', icon: Mail },
-  { name: 'WhatsApp Broadcasts', href: '/dashboard/broadcasts', icon: Send },
+const clientOperations: NavItem[] = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER', 'READ_ONLY'] },
+  { name: 'My Attendance', href: '/dashboard/staff/attendance/clock', icon: Clock, allowedRoles: ['STAFF', 'CASHIER'] }, // Staff/Cashier can clock in from client ops too
+  { name: 'My Leave', href: '/dashboard/staff/attendance/leave-requests', icon: CalendarDays, allowedRoles: ['STAFF', 'CASHIER'] }, // Staff can request leave
+  { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER'] },
+  { name: 'Booking Requests', href: '/dashboard/bookings/requests', icon: MessageSquare, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF'] },
+  { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF'] },
+  { name: 'Clients', href: '/dashboard/clients', icon: Users, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Staff can't see client details
+  { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'CASHIER'] }, // Only managers+ and cashiers
+  { name: 'Marketing', href: '/dashboard/marketing', icon: Mail, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] },
+  { name: 'WhatsApp Broadcasts', href: '/dashboard/broadcasts', icon: Send, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] },
 ];
 
 // Internal operations (back office)
-const internalOperations = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Staff', href: '/dashboard/staff', icon: Users },
-  { name: 'Services', href: '/dashboard/services', icon: Package },
-  { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+const internalOperations: NavItem[] = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER', 'READ_ONLY'] },
+  { name: 'My Attendance', href: '/dashboard/staff/attendance/clock', icon: Clock, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER'] }, // Everyone can clock in
+  { name: 'Staff Management', href: '/dashboard/staff', icon: Users, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Only managers+
+  { name: 'All Attendance', href: '/dashboard/staff/attendance', icon: Clock, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Only managers+ can see all
+  { name: 'Leave Requests', href: '/dashboard/staff/attendance/leave-requests', icon: CalendarDays, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Managers can approve leave
+  { name: 'Services', href: '/dashboard/services', icon: Package, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] },
+  { name: 'Inventory', href: '/dashboard/inventory', icon: Package, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Staff can't see inventory
+  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Staff can't see analytics
+  { name: 'Settings', href: '/dashboard/settings', icon: Settings, allowedRoles: ['SUPER_ADMIN', 'OWNER'] }, // Only owner+
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [viewMode, setViewMode] = useState<'client' | 'internal'>('client');
+  const [userRole, setUserRole] = useState<UserRole>('STAFF');
+  const [userName, setUserName] = useState<string>('');
+  const [loading, setLoading] = useState(true);
 
-  // Load view mode from localStorage on mount
+  // Load user role and view mode
   useEffect(() => {
-    const savedMode = localStorage.getItem('salon_view_mode') as 'client' | 'internal';
-    if (savedMode) {
-      setViewMode(savedMode);
-    }
-  }, []);
+    async function loadUserData() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
-  const toggleViewMode = () => {
-    const newMode = viewMode === 'client' ? 'internal' : 'client';
-    setViewMode(newMode);
-    localStorage.setItem('salon_view_mode', newMode);
-  };
+      // Get user's profile and tenant role
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, default_tenant_id')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.full_name) {
+        setUserName(profile.full_name);
+      }
+
+      if (profile?.default_tenant_id) {
+        // Get user's role in the tenant
+        const { data: tenantUser } = await supabase
+          .from('tenant_users')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('tenant_id', profile.default_tenant_id)
+          .eq('is_active', true)
+          .single();
+
+        if (tenantUser?.role) {
+          setUserRole(tenantUser.role as UserRole);
+        }
+      }
+
+      // Load saved view mode
+      const savedMode = localStorage.getItem('salon_view_mode') as 'client' | 'internal';
+      if (savedMode) {
+        setViewMode(savedMode);
+      }
+
+      setLoading(false);
+    }
+
+    loadUserData();
+  }, []);
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -71,7 +126,57 @@ export function Sidebar() {
     router.refresh();
   };
 
-  const navigation = viewMode === 'client' ? clientOperations : internalOperations;
+  // Filter navigation based on user role
+  const filterByRole = (items: NavItem[]) => {
+    return items.filter(item => item.allowedRoles.includes(userRole));
+  };
+
+  const navigation = viewMode === 'client' 
+    ? filterByRole(clientOperations) 
+    : filterByRole(internalOperations);
+
+  // Check if user can see internal operations toggle
+  const canSeeInternalOps = ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER'].includes(userRole);
+
+  // Get role display name
+  const getRoleDisplay = (role: UserRole) => {
+    const roleNames: Record<UserRole, string> = {
+      'SUPER_ADMIN': 'Super Admin',
+      'OWNER': 'Owner',
+      'MANAGER': 'Manager',
+      'STAFF': 'Staff',
+      'CASHIER': 'Cashier',
+      'READ_ONLY': 'View Only',
+    };
+    return roleNames[role];
+  };
+
+  // Get role color
+  const getRoleColor = (role: UserRole) => {
+    const colors: Record<UserRole, string> = {
+      'SUPER_ADMIN': 'bg-purple-100 text-purple-800',
+      'OWNER': 'bg-blue-100 text-blue-800',
+      'MANAGER': 'bg-green-100 text-green-800',
+      'STAFF': 'bg-gray-100 text-gray-800',
+      'CASHIER': 'bg-yellow-100 text-yellow-800',
+      'READ_ONLY': 'bg-gray-100 text-gray-500',
+    };
+    return colors[role];
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-full w-64 flex-col bg-white border-r">
+        <div className="flex h-16 items-center border-b px-6">
+          <Building2 className="h-6 w-6 text-primary" />
+          <span className="ml-2 text-lg font-bold">SalonOS</span>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-pulse text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full w-64 flex-col bg-white border-r">
@@ -81,51 +186,69 @@ export function Sidebar() {
         <span className="ml-2 text-lg font-bold">SalonOS</span>
       </div>
 
-      {/* View Mode Toggle */}
+      {/* User Info */}
       <div className="border-b p-3">
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          <button
-            onClick={() => {
-              setViewMode('client');
-              localStorage.setItem('salon_view_mode', 'client');
-            }}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-all',
-              viewMode === 'client'
-                ? 'bg-white text-primary shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Store className="h-4 w-4" />
-            Client Ops
-          </button>
-          <button
-            onClick={() => {
-              setViewMode('internal');
-              localStorage.setItem('salon_view_mode', 'internal');
-            }}
-            className={cn(
-              'flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-all',
-              viewMode === 'internal'
-                ? 'bg-white text-primary shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Briefcase className="h-4 w-4" />
-            Internal
-          </button>
+        <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-50">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <User className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{userName || 'User'}</p>
+            <span className={cn('text-xs px-2 py-0.5 rounded-full', getRoleColor(userRole))}>
+              {getRoleDisplay(userRole)}
+            </span>
+          </div>
         </div>
       </div>
+
+      {/* View Mode Toggle - Only show if user has access to internal ops */}
+      {canSeeInternalOps && (
+        <div className="border-b p-3">
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => {
+                setViewMode('client');
+                localStorage.setItem('salon_view_mode', 'client');
+              }}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-all',
+                viewMode === 'client'
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Store className="h-4 w-4" />
+              Client Ops
+            </button>
+            <button
+              onClick={() => {
+                setViewMode('internal');
+                localStorage.setItem('salon_view_mode', 'internal');
+              }}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-all',
+                viewMode === 'internal'
+                  ? 'bg-white text-primary shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Briefcase className="h-4 w-4" />
+              Internal
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
         {navigation.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
+          const isActive = pathname === item.href || 
+            (item.href !== '/dashboard' && pathname?.startsWith(item.href));
 
           return (
             <Link
-              key={item.name}
+              key={item.name + item.href}
               href={item.href}
               className={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
@@ -140,6 +263,16 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Role-based info footer */}
+      {userRole === 'STAFF' && (
+        <div className="border-t p-3">
+          <p className="text-xs text-muted-foreground text-center">
+            Some features are restricted.<br/>
+            Contact your manager for access.
+          </p>
+        </div>
+      )}
 
       {/* Sign Out */}
       <div className="border-t p-4">

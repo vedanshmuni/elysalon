@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Building, MapPin, DollarSign, Clock, Save } from 'lucide-react';
+import { AccessGuard } from '@/components/auth/AccessGuard';
 
-export default function SettingsPage() {
+function SettingsContent() {
   const [loading, setLoading] = useState(false);
   const [tenantId, setTenantId] = useState<string>('');
   const [formData, setFormData] = useState({
@@ -19,7 +20,6 @@ export default function SettingsPage() {
     gst_number: '',
     timezone: 'Asia/Kolkata',
     currency: 'INR',
-    whatsapp_number: '',
   });
 
   const [branches, setBranches] = useState<any[]>([]);
@@ -60,7 +60,6 @@ export default function SettingsPage() {
         gst_number: tenant.gst_number || '',
         timezone: tenant.timezone || 'Asia/Kolkata',
         currency: tenant.currency || 'INR',
-        whatsapp_number: tenant.whatsapp_number || '',
       });
     }
 
@@ -87,7 +86,6 @@ export default function SettingsPage() {
           gst_number: formData.gst_number,
           timezone: formData.timezone,
           currency: formData.currency,
-          whatsapp_number: formData.whatsapp_number,
         })
         .eq('id', tenantId);
 
@@ -148,6 +146,7 @@ export default function SettingsPage() {
                 rows={3}
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="gst_number">GST Number</Label>
               <Input
@@ -156,19 +155,6 @@ export default function SettingsPage() {
                 onChange={(e) => setFormData({ ...formData, gst_number: e.target.value })}
                 placeholder="22AAAAA0000A1Z5"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="whatsapp_number">WhatsApp Business Number</Label>
-              <Input
-                id="whatsapp_number"
-                value={formData.whatsapp_number}
-                onChange={(e) => setFormData({ ...formData, whatsapp_number: e.target.value })}
-                placeholder="+91 1234567890"
-              />
-              <p className="text-xs text-muted-foreground">
-                This number will receive booking requests and send automated messages to customers. Must be registered with WhatsApp Business API.
-              </p>
             </div>
           </CardContent>
         </Card>
@@ -277,5 +263,13 @@ export default function SettingsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <AccessGuard allowedRoles={['SUPER_ADMIN', 'OWNER']}>
+      <SettingsContent />
+    </AccessGuard>
   );
 }

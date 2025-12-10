@@ -12,24 +12,13 @@ import {
 import { Plus, Package, AlertTriangle, DollarSign } from 'lucide-react';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/utils/currency';
+import { requireRole, FEATURE_PERMISSIONS } from '@/lib/auth/roles';
 
 export default async function InventoryPage() {
+  // Require inventory access permission - redirects unauthorized users
+  const { tenantId } = await requireRole(FEATURE_PERMISSIONS.viewInventory);
+  
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('default_tenant_id')
-    .eq('id', user.id)
-    .single();
-
-  const tenantId = profile?.default_tenant_id;
-  if (!tenantId) return null;
 
   const { data: products } = await supabase
     .from('products')

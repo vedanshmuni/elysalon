@@ -1,7 +1,7 @@
 -- Staff Attendance and Management System
 -- Includes: Clock in/out, breaks, leave management, attendance tracking, performance metrics
 
--- Drop existing tables to ensure clean schema creation
+-- Drop existing tables to ensure clean schema creation (fixes potential column mismatch issues)
 DROP TABLE IF EXISTS staff_breaks CASCADE;
 DROP TABLE IF EXISTS staff_attendance CASCADE;
 DROP TABLE IF EXISTS staff_leave_requests CASCADE;
@@ -106,14 +106,14 @@ CREATE TABLE IF NOT EXISTS staff_leave_requests (
   -- Leave period
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
-  total_days DECIMAL(3, 1) NOT NULL,
+  total_days DECIMAL(3, 1) NOT NULL, -- Support half days
   
   -- Request details
   reason TEXT NOT NULL,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
   
   -- Approval workflow
-  requested_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   reviewed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
   reviewed_at TIMESTAMPTZ,
   review_notes TEXT,
@@ -164,7 +164,7 @@ CREATE TABLE IF NOT EXISTS staff_performance (
   total_services_completed INTEGER DEFAULT 0,
   total_revenue DECIMAL(10, 2) DEFAULT 0,
   average_service_rating DECIMAL(3, 2),
-  client_rebooking_rate DECIMAL(5, 2),
+  client_rebooking_rate DECIMAL(5, 2), -- Percentage
   
   -- Attendance metrics
   days_worked INTEGER DEFAULT 0,
@@ -182,13 +182,35 @@ CREATE TABLE IF NOT EXISTS staff_performance (
 );
 
 -- =====================================================
--- TRIGGER: Set clock_in_date on INSERT
+-- INDICES
 -- =====================================================
 
+CREATE INDEX IF NOT EXISTS idx_staff_attendance_staff ON staff_attendance(staff_id, clock_in DESC);
+CREATE INDEX IF NOT EXISTS idx_staff_attendance_tenant ON staff_attendance(tenant_id, clock_in DESC);
+CREATE INDEX IF NOT EXISTS idx_staff_attendance_date ON staff_attendance(tenant_id, clock_in_date);
+CREATE INDEX IF NOT EXISTS idx_staff_attendance_status ON staff_attendance(status) WHERE status != 'clocked_out';
+
+CREATE INDEX IF NOT EXISTS idx_staff_breaks_attendance ON staff_breaks(attendance_id);
+
+CREATE INDEX IF NOT EXISTS idx_leave_requests_staff ON staff_leave_requests(staff_id, start_date DESC);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON staff_leave_requests(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_dates ON staff_leave_requests(tenant_id, start_date, end_date);
+
+CREATE INDEX IF NOT EXISTS idx_leave_balances_staff ON staff_leave_balances(staff_id, year DESC);
+
+CREATE INDEX IF NOT EXISTS idx_staff_performance_staff ON staff_performance(staff_id, period_start DESC);
+CREATE INDEX IF NOT EXISTS idx_staff_performance_tenant ON staff_performance(tenant_id, period_start DESC);
+
+-- =====================================================
+-- FUNCTIONS
+-- =====================================================
+
+-- Function to set clock_in_date on insert
 CREATE OR REPLACE FUNCTION set_clock_in_date()
 RETURNS TRIGGER AS $$
 BEGIN
-  NEW.clock_in_date := (NEW.clock_in AT TIME ZONE 'Asia/Kolkata')::DATE;
+  -- Extract date from clock_in at UTC timezone for consistency
+  NEW.clock_in_date := (NEW.clock_in AT TIME ZONE 'UTC')::DATE;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -197,30 +219,6 @@ CREATE TRIGGER trigger_set_clock_in_date
 BEFORE INSERT ON staff_attendance
 FOR EACH ROW
 EXECUTE FUNCTION set_clock_in_date();
-
--- =====================================================
--- INDICES (using the stored clock_in_date column)
--- =====================================================
-
-CREATE INDEX idx_staff_attendance_staff ON staff_attendance(staff_id, clock_in DESC);
-CREATE INDEX idx_staff_attendance_tenant ON staff_attendance(tenant_id, clock_in DESC);
-CREATE INDEX idx_staff_attendance_date ON staff_attendance(tenant_id, clock_in_date);
-CREATE INDEX idx_staff_attendance_status ON staff_attendance(status) WHERE status != 'clocked_out';
-
-CREATE INDEX idx_staff_breaks_attendance ON staff_breaks(attendance_id);
-
-CREATE INDEX idx_leave_requests_staff ON staff_leave_requests(staff_id, start_date DESC);
-CREATE INDEX idx_leave_requests_status ON staff_leave_requests(tenant_id, status);
-CREATE INDEX idx_leave_requests_dates ON staff_leave_requests(tenant_id, start_date, end_date);
-
-CREATE INDEX idx_leave_balances_staff ON staff_leave_balances(staff_id, year DESC);
-
-CREATE INDEX idx_staff_performance_staff ON staff_performance(staff_id, period_start DESC);
-CREATE INDEX idx_staff_performance_tenant ON staff_performance(tenant_id, period_start DESC);
-
--- =====================================================
--- FUNCTIONS
--- =====================================================
 
 -- Function to calculate total hours worked
 CREATE OR REPLACE FUNCTION calculate_attendance_hours()
@@ -235,12 +233,11 @@ BEGIN
     END IF;
   END IF;
   
-  NEW.updated_at := NOW();
+  NEW.updated_at := CURRENT_TIMESTAMP;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trigger_calculate_attendance_hours ON staff_attendance;
 CREATE TRIGGER trigger_calculate_attendance_hours
 BEFORE UPDATE ON staff_attendance
 FOR EACH ROW
@@ -264,7 +261,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trigger_update_break_total ON staff_breaks;
 CREATE TRIGGER trigger_update_break_total
 BEFORE UPDATE ON staff_breaks
 FOR EACH ROW
@@ -280,38 +276,37 @@ BEGIN
     SET 
       total_used = total_used + NEW.total_days,
       total_pending = GREATEST(0, total_pending - NEW.total_days),
-      updated_at = NOW()
+      updated_at = CURRENT_TIMESTAMP
     WHERE 
       staff_id = NEW.staff_id 
       AND leave_type_id = NEW.leave_type_id
-      AND year = EXTRACT(YEAR FROM NEW.start_date);
+      AND year = EXTRACT(YEAR FROM NEW.start_date)::INTEGER;
   ELSIF NEW.status = 'pending' AND OLD.status != 'pending' THEN
     -- Add to pending balance
     UPDATE staff_leave_balances
     SET 
       total_pending = total_pending + NEW.total_days,
-      updated_at = NOW()
+      updated_at = CURRENT_TIMESTAMP
     WHERE 
       staff_id = NEW.staff_id 
       AND leave_type_id = NEW.leave_type_id
-      AND year = EXTRACT(YEAR FROM NEW.start_date);
+      AND year = EXTRACT(YEAR FROM NEW.start_date)::INTEGER;
   ELSIF NEW.status IN ('rejected', 'cancelled') AND OLD.status = 'pending' THEN
     -- Remove from pending
     UPDATE staff_leave_balances
     SET 
       total_pending = GREATEST(0, total_pending - NEW.total_days),
-      updated_at = NOW()
+      updated_at = CURRENT_TIMESTAMP
     WHERE 
       staff_id = NEW.staff_id 
       AND leave_type_id = NEW.leave_type_id
-      AND year = EXTRACT(YEAR FROM NEW.start_date);
+      AND year = EXTRACT(YEAR FROM NEW.start_date)::INTEGER;
   END IF;
   
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trigger_update_leave_balance ON staff_leave_requests;
 CREATE TRIGGER trigger_update_leave_balance
 AFTER UPDATE ON staff_leave_requests
 FOR EACH ROW
@@ -319,7 +314,7 @@ WHEN (OLD.status IS DISTINCT FROM NEW.status)
 EXECUTE FUNCTION update_leave_balance();
 
 -- =====================================================
--- RLS POLICIES (using user_belongs_to_tenant function)
+-- RLS POLICIES
 -- =====================================================
 
 ALTER TABLE staff_attendance ENABLE ROW LEVEL SECURITY;
@@ -330,22 +325,26 @@ ALTER TABLE staff_leave_balances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE staff_performance ENABLE ROW LEVEL SECURITY;
 
 -- Staff Attendance Policies
+DROP POLICY IF EXISTS "Users can view attendance for their tenant" ON staff_attendance;
 CREATE POLICY "Users can view attendance for their tenant"
   ON staff_attendance FOR SELECT
   TO authenticated
   USING (user_belongs_to_tenant(tenant_id));
 
+DROP POLICY IF EXISTS "Users can insert attendance for their tenant" ON staff_attendance;
 CREATE POLICY "Users can insert attendance for their tenant"
   ON staff_attendance FOR INSERT
   TO authenticated
   WITH CHECK (user_belongs_to_tenant(tenant_id));
 
+DROP POLICY IF EXISTS "Users can update attendance for their tenant" ON staff_attendance;
 CREATE POLICY "Users can update attendance for their tenant"
   ON staff_attendance FOR UPDATE
   TO authenticated
   USING (user_belongs_to_tenant(tenant_id));
 
 -- Staff Breaks Policies
+DROP POLICY IF EXISTS "Users can manage breaks for their tenant" ON staff_breaks;
 CREATE POLICY "Users can manage breaks for their tenant"
   ON staff_breaks FOR ALL
   TO authenticated
@@ -354,56 +353,59 @@ CREATE POLICY "Users can manage breaks for their tenant"
   ));
 
 -- Leave Types Policies
+DROP POLICY IF EXISTS "Users can view leave types for their tenant" ON leave_types;
 CREATE POLICY "Users can view leave types for their tenant"
   ON leave_types FOR SELECT
   TO authenticated
   USING (user_belongs_to_tenant(tenant_id));
 
+DROP POLICY IF EXISTS "Users can manage leave types for their tenant" ON leave_types;
 CREATE POLICY "Users can manage leave types for their tenant"
   ON leave_types FOR ALL
   TO authenticated
   USING (user_belongs_to_tenant(tenant_id));
 
 -- Leave Requests Policies
+DROP POLICY IF EXISTS "Users can view leave requests for their tenant" ON staff_leave_requests;
 CREATE POLICY "Users can view leave requests for their tenant"
   ON staff_leave_requests FOR SELECT
   TO authenticated
   USING (user_belongs_to_tenant(tenant_id));
 
+DROP POLICY IF EXISTS "Staff can create own leave requests" ON staff_leave_requests;
 CREATE POLICY "Staff can create own leave requests"
   ON staff_leave_requests FOR INSERT
   TO authenticated
   WITH CHECK (user_belongs_to_tenant(tenant_id));
 
+DROP POLICY IF EXISTS "Users can update leave requests for their tenant" ON staff_leave_requests;
 CREATE POLICY "Users can update leave requests for their tenant"
   ON staff_leave_requests FOR UPDATE
   TO authenticated
   USING (user_belongs_to_tenant(tenant_id));
 
 -- Leave Balances Policies
+DROP POLICY IF EXISTS "Users can view leave balances for their tenant" ON staff_leave_balances;
 CREATE POLICY "Users can view leave balances for their tenant"
   ON staff_leave_balances FOR SELECT
   TO authenticated
   USING (user_belongs_to_tenant(tenant_id));
 
+DROP POLICY IF EXISTS "Users can manage leave balances for their tenant" ON staff_leave_balances;
 CREATE POLICY "Users can manage leave balances for their tenant"
   ON staff_leave_balances FOR ALL
   TO authenticated
   USING (user_belongs_to_tenant(tenant_id));
 
 -- Performance Policies
+DROP POLICY IF EXISTS "Users can view performance for their tenant" ON staff_performance;
 CREATE POLICY "Users can view performance for their tenant"
   ON staff_performance FOR SELECT
   TO authenticated
   USING (user_belongs_to_tenant(tenant_id));
 
+DROP POLICY IF EXISTS "Managers can manage performance for their tenant" ON staff_performance;
 CREATE POLICY "Managers can manage performance for their tenant"
   ON staff_performance FOR ALL
   TO authenticated
   USING (user_belongs_to_tenant(tenant_id));
-
--- =====================================================
--- SEED DEFAULT LEAVE TYPES (per tenant)
--- These will be created when a new tenant is created through the app
--- =====================================================
--- Leave types: Sick Leave, Casual Leave, Annual Leave, Maternity, Paternity, Unpaid Leave
