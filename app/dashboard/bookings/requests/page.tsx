@@ -118,11 +118,13 @@ export default function BookingRequestsPage() {
         .limit(1)
         .single();
 
-      // Create booking datetime
-      const bookingDateTime = `${selectedRequest.parsed_date}T${selectedRequest.parsed_time}:00+05:30`;
+      // Create booking datetime in IST
+      // parsed_time is in format "HH:MM" and parsed_date is "YYYY-MM-DD"
+      const [hours, minutes] = selectedRequest.parsed_time!.split(':').map(Number);
+      const dateStr = selectedRequest.parsed_date!;
       
-      // Calculate end time
-      const startTime = new Date(bookingDateTime);
+      // Create date in IST (Asia/Kolkata timezone)
+      const startTime = new Date(`${dateStr}T${selectedRequest.parsed_time}:00+05:30`);
       const endTime = new Date(startTime.getTime() + service.duration_minutes * 60000);
 
       // Create booking
@@ -132,7 +134,7 @@ export default function BookingRequestsPage() {
           tenant_id: tenantId,
           client_id: selectedRequest.client_id,
           branch_id: branch?.id,
-          scheduled_start: bookingDateTime,
+          scheduled_start: startTime.toISOString(),
           scheduled_end: endTime.toISOString(),
           status: 'CONFIRMED',
           source: 'WHATSAPP',
