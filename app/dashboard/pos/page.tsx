@@ -150,7 +150,7 @@ export default function POSPage() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Get today's completed bookings for this client
+    // Get today's confirmed bookings for this client (ready for payment)
     const { data } = await supabase
       .from('bookings')
       .select(`
@@ -172,7 +172,7 @@ export default function POSPage() {
         )
       `)
       .eq('client_id', clientId)
-      .eq('status', 'COMPLETED')
+      .eq('status', 'CONFIRMED')
       .gte('scheduled_start', today.toISOString())
       .order('scheduled_start', { ascending: false });
 
@@ -483,7 +483,7 @@ export default function POSPage() {
                     ))}
                   </select>
                   {clientBookings.length === 0 && invoiceData.client_id && (
-                    <p className="text-xs text-muted-foreground">No completed bookings today</p>
+                    <p className="text-xs text-muted-foreground">No confirmed bookings today</p>
                   )}
                 </div>
               )}
