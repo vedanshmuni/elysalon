@@ -40,6 +40,27 @@ interface InvoiceItem {
   tax_rate: number;
   discount_amount: number;
   total: number;
+  staff_id?: string;
+  staff_name?: string;
+}
+
+interface Booking {
+  id: string;
+  scheduled_start: string;
+  booking_items: Array<{
+    id: string;
+    service: {
+      id: string;
+      name: string;
+      base_price: number;
+      tax_rate: number;
+    };
+    staff: {
+      id: string;
+      display_name: string;
+    };
+    price: number;
+  }>;
 }
 
 export default function POSPage() {
@@ -51,9 +72,12 @@ export default function POSPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [clientBookings, setClientBookings] = useState<Booking[]>([]);
+  const [selectedBooking, setSelectedBooking] = useState<string>('');
 
   const [invoiceData, setInvoiceData] = useState({
     client_id: '',
+    booking_id: '',
     discount_amount: 0,
     payment_method: 'CASH' as 'CASH' | 'CARD' | 'UPI' | 'WALLET',
   });
@@ -114,6 +138,67 @@ export default function POSPage() {
       .eq('tenant_id', tid)
       .eq('is_active', true);
     setProducts(productsData || []);
+  }
+
+  async function loadClientBookings(clientId: string) {
+    if (!clientId) {
+      setClientBookings([]);
+      return;
+    }
+
+    const supabase = createClient();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get today's completed bookings for this client
+    const { data } = await supabase
+      .from('bookings')
+      .select(`
+        id,
+        scheduled_start,
+        booking_items (
+          id,
+          price,
+          service:services (
+            id,
+            name,
+            base_price,
+            tax_rate
+          ),
+          staff:staff (
+            id,
+            display_name
+          )
+        )
+      `)
+      .eq('client_id', clientId)
+      .eq('status', 'COMPLETED')
+      .gte('scheduled_start', today.toISOString())
+      .order('scheduled_start', { ascending: false });
+
+    setClientBookings(data || []);
+  }
+
+  function loadBookingItems(bookingId: string) {
+    const booking = clientBookings.find(b => b.id === bookingId);
+    if (!booking) return;
+
+    const bookingItems: InvoiceItem[] = booking.booking_items.map(item => ({
+      type: 'SERVICE' as const,
+      reference_id: item.service.id,
+      name: item.service.name,
+      quantity: 1,
+      unit_price: item.price,
+      tax_rate: item.service.tax_rate || 18,
+      discount_amount: 0,
+      total: item.price,
+      staff_id: item.staff?.id,
+      staff_name: item.staff?.display_name
+    }));
+
+    setItems(bookingItems);
+    setSelectedBooking(bookingId);
+    setInvoiceData(prev => ({ ...prev, booking_id: bookingId }));
   }
 
   function addService(service: Service) {
@@ -189,6 +274,7 @@ export default function POSPage() {
         .insert({
           tenant_id: tenantId,
           branch_id: branchId,
+          booking_id: invoiceData.booking_id || null,
           client_id: invoiceData.client_id || null,
           invoice_number: invoiceNumber,
           status: 'PAID',
@@ -229,10 +315,17 @@ export default function POSPage() {
 
       if (paymentError) throw paymentError;
 
-      // Show success message
+      // Send invoice via WhatsApp automatically
       const selectedClient = clients.find(c => c.id === invoiceData.client_id);
       if (selectedClient?.phone) {
-        alert(`✅ Payment processed successfully!\n\nInvoice will be sent to ${selectedClient.full_name} via WhatsApp automatically.`);
+        // Send in background, don't wait for it
+        fetch('/api/invoices/send-whatsapp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoiceId: invoice.id }),
+        }).catch(err => console.error('Failed to send WhatsApp invoice:', err));
+        
+        alert(`✅ Payment processed!\n\nInvoice is being sent to ${selectedClient.full_name} via WhatsApp.`);
       } else {
         alert('✅ Payment processed successfully!');
       }
@@ -347,14 +440,20 @@ export default function POSPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="client_id">Client (Optional)</Label>
+                <Label htmlFor="client_id">Select Client *</Label>
                 <select
                   id="client_id"
                   value={invoiceData.client_id}
-                  onChange={(e) => setInvoiceData({ ...invoiceData, client_id: e.target.value })}
+                  onChange={(e) => {
+                    const clientId = e.target.value;
+                    setInvoiceData({ ...invoiceData, client_id: clientId, booking_id: '' });
+                    setSelectedBooking('');
+                    setItems([]);
+                    loadClientBookings(clientId);
+                  }}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">Walk-in</option>
+                  <option value="">Select a client...</option>
                   {clients.map((client) => (
                     <option key={client.id} value={client.id}>
                       {client.full_name}
@@ -363,12 +462,43 @@ export default function POSPage() {
                 </select>
               </div>
 
+              {invoiceData.client_id && (
+                <div className="space-y-2">
+                  <Label htmlFor="booking_id">Today's Booking (Optional)</Label>
+                  <select
+                    id="booking_id"
+                    value={selectedBooking}
+                    onChange={(e) => loadBookingItems(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">No booking - add services manually</option>
+                    {clientBookings.map((booking) => (
+                      <option key={booking.id} value={booking.id}>
+                        {new Date(booking.scheduled_start).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: true
+                        })} - {booking.booking_items.length} service(s)
+                      </option>
+                    ))}
+                  </select>
+                  {clientBookings.length === 0 && invoiceData.client_id && (
+                    <p className="text-xs text-muted-foreground">No completed bookings today</p>
+                  )}
+                </div>
+              )}
+
               {/* Items List */}
               <div className="space-y-2 max-h-[400px] overflow-y-auto">
                 {items.map((item, index) => (
                   <div key={index} className="p-2 border rounded space-y-2">
                     <div className="flex justify-between items-start">
-                      <span className="text-sm font-medium">{item.name}</span>
+                      <div>
+                        <span className="text-sm font-medium">{item.name}</span>
+                        {item.staff_name && (
+                          <p className="text-xs text-muted-foreground">Staff: {item.staff_name}</p>
+                        )}
+                      </div>
                       <Button
                         variant="ghost"
                         size="icon"
