@@ -40,26 +40,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate invoice PDF URL (you'll need to implement actual PDF generation)
-    // For now, we'll create a simple text-based invoice
-    const invoiceDetails = {
-      invoiceNumber: invoice.invoice_number,
-      date: new Date(invoice.issued_at).toLocaleDateString(),
-      clientName: client.full_name,
-      items: invoice.invoice_items.map((item: any) => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.unit_price,
-        total: item.total,
-      })),
-      subtotal: invoice.subtotal,
-      tax: invoice.tax_amount,
-      discount: invoice.discount_amount,
-      total: invoice.total,
-    };
+    // Generate PDF and upload to Supabase Storage
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const generateResponse = await fetch(`${baseUrl}/api/invoices/generate-pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ invoiceId })
+    });
 
-    // Send invoice via WhatsApp
-    const result = await sendInvoicePDF(client.phone, invoiceDetails);
+    if (!generateResponse.ok) {
+      const errorData = await generateResponse.json();
+      throw new Error(errorData.error || 'Failed to generate PDF');
+    }
+
+    const { pdfUrl } = await generateResponse.json();
+
+    // Send invoice via WhatsApp with PDF URL
+    const result = await sendInvoicePDF(
+      client.phone,
+      client.full_name || 'Valued Customer',
+      invoice.invoice_number,
+      invoice.total,
+      pdfUrl
+    );
 
     if (!result.success) {
       return NextResponse.json(
@@ -71,7 +74,7 @@ export async function POST(request: NextRequest) {
     // Update invoice to mark as sent via WhatsApp
     await supabase
       .from('invoices')
-      .update({ invoice_sent_via_whatsapp: true })
+      .update({ sent_at: new Date().toISOString() })
       .eq('id', invoiceId);
 
     return NextResponse.json({

@@ -135,23 +135,21 @@ See you soon! 😊`;
  */
 export async function sendInvoicePDF(
   phoneNumber: string,
-  invoiceDetails: {
-    clientName: string;
-    invoiceNumber: string;
-    pdfUrl: string;
-    amount: string;
-  }
+  clientName: string,
+  invoiceNumber: string,
+  total: number,
+  pdfUrl: string
 ) {
   const cleanPhone = phoneNumber.replace(/\D/g, '');
 
   // First send a text message
   await sendTextMessage(
     cleanPhone,
-    `Hi ${invoiceDetails.clientName}! 🧾
+    `Hi ${clientName}! 🧾
 
-Thank you for your payment of ${invoiceDetails.amount}! 
+Thank you for your payment of ₹${total.toFixed(2)}! 
 
-Your invoice #${invoiceDetails.invoiceNumber} is attached below. 
+Your invoice #${invoiceNumber} is attached below. 
 
 Thank you for choosing us! 💙`
   );
@@ -161,9 +159,9 @@ Thank you for choosing us! 💙`
     to: cleanPhone,
     type: 'document',
     document: {
-      link: invoiceDetails.pdfUrl,
-      filename: `Invoice_${invoiceDetails.invoiceNumber}.pdf`,
-      caption: `Invoice #${invoiceDetails.invoiceNumber}`,
+      link: pdfUrl,
+      filename: `Invoice_${invoiceNumber}.pdf`,
+      caption: `Invoice #${invoiceNumber}`,
     },
   });
 }
