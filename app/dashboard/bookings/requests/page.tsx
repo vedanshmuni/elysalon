@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { CheckCircle, XCircle, Clock, MessageSquare } from 'lucide-react';
 import { formatDate } from '@/lib/utils/date';
 import Link from 'next/link';
