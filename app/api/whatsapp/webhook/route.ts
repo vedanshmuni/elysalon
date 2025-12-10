@@ -531,44 +531,6 @@ async function sendTimeSlotPeriodSelection(from: string, serviceId: string, date
     console.error('Error sending time slots:', error);
     await sendTextMessage(from, 'Unable to show time slots. Please try again.');
   }
-}   const dateDisplay = dateObj.toLocaleDateString('en-IN', { 
-      weekday: 'long', 
-      day: 'numeric', 
-      month: 'short',
-      timeZone: 'Asia/Kolkata'
-    });
-
-    // Split into 3 sections with max 9 rows each (staying under 10 limit)
-    const morning = timeSlots.filter(slot => slot.description === '☀️ Morning');
-    const afternoon = timeSlots.filter(slot => slot.description === '☀️ Afternoon');
-    const evening = timeSlots.filter(slot => slot.description === '🌙 Evening');
-
-    await sendInteractiveList(from, {
-      headerText: service?.name || 'Select Time',
-      bodyText: `Choose your preferred time on ${dateDisplay}:`,
-      buttonText: 'Choose Time',
-      footerText: 'All times in IST',
-      sections: [
-        {
-          title: '☀️ Morning (10 AM - 12 PM)',
-          rows: morning.slice(0, 9)
-        },
-        {
-          title: '☀️ Afternoon (12 PM - 5 PM)',
-          rows: afternoon.slice(0, 9)
-        },
-        {
-          title: '🌙 Evening (5 PM - 9 PM)',
-          rows: evening.slice(0, 9)
-        }
-      ].filter(section => section.rows.length > 0)
-    });
-
-    console.log('✅ Time slots sent to', from);
-  } catch (error) {
-    console.error('Error sending time slots:', error);
-    await sendTextMessage(from, 'Unable to show time slots. Please try again.');
-  }
 }
 
 /**
