@@ -46,7 +46,13 @@ export async function generateInvoicePDF(invoiceId: string) {
     // Generate PDF using Puppeteer
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu'
+      ]
     });
     const page = await browser.newPage();
     await page.setContent(invoiceHTML, { waitUntil: 'networkidle0' });
