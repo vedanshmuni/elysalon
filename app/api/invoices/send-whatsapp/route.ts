@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { sendInvoicePDF } from '@/lib/whatsapp/client';
-import { generateInvoicePDF } from '../generate-pdf/route';
+import { sendTextMessage } from '@/lib/whatsapp/client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,26 +40,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate PDF and upload to Supabase Storage
-    const { pdfUrl } = await generateInvoicePDF(invoiceId);
+    // Format invoice details
+    const invoiceDate = new Date(invoice.issued_at || invoice.created_at).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
 
-    // Send invoice via WhatsApp with PDF URL
-    const result = await sendInvoicePDF(
-      client.phone,
-      client.full_name || 'Valued Customer',
-      invoice.invoice_number,
-      invoice.total,
-      pdfUrl
-    );
+    // Build invoice text
+    const itemsList = invoice.invoice_items.map((item: any) => 
+      `• ${item.name} x${item.quantity} - ₹${Number(item.total).toFixed(2)}`
+    ).join('\n');
 
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || 'Failed to send WhatsApp message' },
-        { status: 500 }
-      );
-    }
+    const invoiceText = `🧾 *INVOICE #${invoice.invoice_number}*\n\n` +
+      `📅 Date: ${invoiceDate}\n` +
+      `👤 Customer: ${client.full_name || 'Walk-in'}\n\n` +
+      `*Items:*\n${itemsList}\n\n` +
+      `━━━━━━━━━━━━━━━━\n` +
+      `Subtotal: ₹${Number(invoice.subtotal).toFixed(2)}\n` +
+      (invoice.discount_amount > 0 ? `Discount: -₹${Number(invoice.discount_amount).toFixed(2)}\n` : '') +
+      `GST (18%): ₹${Number(invoice.tax_amount).toFixed(2)}\n` +
+      `━━━━━━━━━━━━━━━━\n` +
+      `*Total Paid: ₹${Number(invoice.total).toFixed(2)}*\n\n` +
+      `✅ Payment Status: PAID\n\n` +
+      `Thank you for your business! 🙏\n` +
+      `We look forward to serving you again! 💇✨`;
 
-    // Update invoice to mark as sent via WhatsApp
+    // Send invoice via WhatsApp
+    await sendTextMessage(client.phone, invoiceText);
+
+    // Update invoice to mark as sent
     await supabase
       .from('invoices')
       .update({ sent_at: new Date().toISOString() })
@@ -68,8 +77,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Invoice sent via WhatsApp successfully',
-      messageId: result.messageId,
+      message: 'Invoice sent via WhatsApp successfully'
     });
   } catch (error: any) {
     console.error('Error sending invoice via WhatsApp:', error);
