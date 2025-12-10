@@ -441,7 +441,7 @@ async function sendDateSelection(from: string, serviceId: string, tenantId: stri
 }
 
 /**
- * Send time period selection (Morning/Afternoon/Evening)
+ * Send time period selection (Morning/Afternoon/Evening) as buttons
  */
 async function sendTimeSlotPeriodSelection(from: string, serviceId: string, date: string, tenantId: string) {
   try {
@@ -460,8 +460,46 @@ async function sendTimeSlotPeriodSelection(from: string, serviceId: string, date
       timeZone: 'Asia/Kolkata'
     });
 
-    // Generate time slots based on selected period
-    const timeSlots = [];
+    // Send 3 buttons for time period selection
+    await sendInteractiveButtons(from, {
+      headerText: service?.name || 'Select Time Period',
+      bodyText: `Choose your preferred time for ${dateDisplay}:`,
+      buttons: [
+        { id: `period_morning_${date}_${serviceId}`, title: '☀️ Morning' },
+        { id: `period_afternoon_${date}_${serviceId}`, title: '🌤️ Afternoon' },
+        { id: `period_evening_${date}_${serviceId}`, title: '🌙 Evening' }
+      ],
+      footerText: 'Morning: 10 AM-12 PM | Afternoon: 12-5 PM | Evening: 5-9 PM'
+    });
+
+    console.log('✅ Period selection sent to', from);
+  } catch (error) {
+    console.error('Error sending period selection:', error);
+    await sendTextMessage(from, 'Unable to show time periods. Please try again.');
+  }
+}
+
+/**
+ * Send time slots for selected period
+ */
+async function sendTimeSlotSelection(from: string, serviceId: string, date: string, period: string, tenantId: string) {
+  try {
+    const supabase = createServiceRoleClient();
+    const { data: service } = await supabase
+      .from('services')
+      .select('name')
+      .eq('id', serviceId)
+      .single();
+
+    const dateObj = new Date(date + 'T00:00:00');
+    const dateDisplay = dateObj.toLocaleDateString('en-IN', { 
+      weekday: 'long', 
+      day: 'numeric', 
+      month: 'short',
+      timeZone: 'Asia/Kolkata'
+    });
+
+    // Determine time range based on period
     let startHour = 10;
     let endHour = 21;
     let periodName = '';
@@ -473,19 +511,17 @@ async function sendTimeSlotPeriodSelection(from: string, serviceId: string, date
     } else if (period === 'afternoon') {
       startHour = 12;
       endHour = 17;
-      periodName = '☀️ Afternoon (12 PM - 5 PM)';
+      periodName = '🌤️ Afternoon (12 PM - 5 PM)';
     } else if (period === 'evening') {
       startHour = 17;
       endHour = 21;
       periodName = '🌙 Evening (5 PM - 9 PM)';
     }
 
-    // Generate slots for the selected period
-    for (let hour = startHour; hour <= endHour; hour++) {
+    // Generate time slots for the period
+    const timeSlots = [];
+    for (let hour = startHour; hour < endHour; hour++) {
       for (let min = 0; min < 60; min += 30) {
-        if (hour === endHour && min > 0) break;
-        if (hour === 21 && min > 0) break; // Stop at 9:00 PM
-        
         const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
         const display12 = hour > 12 ? hour - 12 : (hour === 12 ? 12 : hour);
         const ampm = hour >= 12 ? 'PM' : 'AM';
