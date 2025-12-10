@@ -151,7 +151,7 @@ export default function POSPage() {
     today.setHours(0, 0, 0, 0);
 
     // Get today's confirmed bookings for this client (ready for payment)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('bookings')
       .select(`
         id,
@@ -159,13 +159,13 @@ export default function POSPage() {
         booking_items (
           id,
           price,
-          service:services (
+          service:services!booking_items_service_id_fkey (
             id,
             name,
             base_price,
             tax_rate
           ),
-          staff:staff (
+          staff:staff!booking_items_staff_id_fkey (
             id,
             display_name
           )
@@ -176,26 +176,51 @@ export default function POSPage() {
       .gte('scheduled_start', today.toISOString())
       .order('scheduled_start', { ascending: false });
 
+    if (error) {
+      console.error('Error loading client bookings:', error);
+    }
+
+    console.log('Client bookings loaded:', data);
     setClientBookings(data || []);
   }
 
   function loadBookingItems(bookingId: string) {
+    if (!bookingId) {
+      setSelectedBooking('');
+      setInvoiceData(prev => ({ ...prev, booking_id: '' }));
+      return;
+    }
+
     const booking = clientBookings.find(b => b.id === bookingId);
-    if (!booking) return;
+    console.log('Loading booking items for:', bookingId, booking);
+    
+    if (!booking) {
+      console.error('Booking not found:', bookingId);
+      return;
+    }
+
+    if (!booking.booking_items || booking.booking_items.length === 0) {
+      console.warn('No booking items found for booking:', bookingId);
+      alert('This booking has no services. Please add services manually.');
+      setSelectedBooking(bookingId);
+      setInvoiceData(prev => ({ ...prev, booking_id: bookingId }));
+      return;
+    }
 
     const bookingItems: InvoiceItem[] = booking.booking_items.map(item => ({
       type: 'SERVICE' as const,
-      reference_id: item.service.id,
-      name: item.service.name,
+      reference_id: item.service?.id || '',
+      name: item.service?.name || 'Unknown Service',
       quantity: 1,
       unit_price: item.price,
-      tax_rate: item.service.tax_rate || 18,
+      tax_rate: item.service?.tax_rate || 18,
       discount_amount: 0,
       total: item.price,
       staff_id: item.staff?.id,
       staff_name: item.staff?.display_name
     }));
 
+    console.log('Setting booking items:', bookingItems);
     setItems(bookingItems);
     setSelectedBooking(bookingId);
     setInvoiceData(prev => ({ ...prev, booking_id: bookingId }));
