@@ -80,16 +80,21 @@ export default async function BookingsPage({
 
   const { data: bookings } = await query.limit(100);
 
-  // Get today's date range
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+  // Get today's date range in IST
+  const now = new Date();
+  const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
+  const todayStartUTC = new Date(now.getTime() + now.getTimezoneOffset() * 60000); // Convert to UTC
+  todayStartUTC.setHours(0 - Math.floor(istOffset / 3600000), 0, 0, 0); // Subtract IST offset to get IST midnight in UTC
+  
+  const todayEndUTC = new Date(todayStartUTC);
+  todayEndUTC.setHours(23 + Math.floor(istOffset / 3600000), 59, 59, 999);
 
   const todayBookings = bookings?.filter(
     (b: any) => {
       const bookingDate = new Date(b.scheduled_start);
-      return bookingDate >= todayStart && bookingDate <= todayEnd;
+      const istDateStr = bookingDate.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
+      const todayStr = now.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' });
+      return istDateStr === todayStr;
     }
   ).length || 0;
 
@@ -222,9 +227,21 @@ export default async function BookingsPage({
                 bookings.map((booking: any) => (
                   <TableRow key={booking.id}>
                     <TableCell>
-                      <div className="font-medium">{formatDate(booking.scheduled_start)}</div>
+                      <div className="font-medium">
+                        {new Date(booking.scheduled_start).toLocaleDateString('en-IN', { 
+                          timeZone: 'Asia/Kolkata',
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </div>
                       <div className="text-sm text-muted-foreground">
-                        {new Date(booking.scheduled_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                        {new Date(booking.scheduled_start).toLocaleTimeString('en-IN', { 
+                          timeZone: 'Asia/Kolkata',
+                          hour: '2-digit', 
+                          minute: '2-digit',
+                          hour12: true
+                        })}
                       </div>
                     </TableCell>
                     <TableCell>

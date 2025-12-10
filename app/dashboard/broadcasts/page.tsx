@@ -351,6 +351,7 @@ export default function BroadcastsPage() {
                     <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                       <span>
                         {new Date(broadcast.created_at).toLocaleDateString('en-IN', {
+                          timeZone: 'Asia/Kolkata',
                           day: 'numeric',
                           month: 'short',
                           year: 'numeric',

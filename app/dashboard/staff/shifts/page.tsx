@@ -288,15 +288,19 @@ export default function ShiftManagementPage() {
                     </TableCell>
                     <TableCell>{shift.branch?.name || 'N/A'}</TableCell>
                     <TableCell>
-                      {new Date(shift.start_time).toLocaleTimeString('en-US', {
+                      {new Date(shift.start_time).toLocaleTimeString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
                         hour: '2-digit',
                         minute: '2-digit',
+                        hour12: true
                       })}
                     </TableCell>
                     <TableCell>
-                      {new Date(shift.end_time).toLocaleTimeString('en-US', {
+                      {new Date(shift.end_time).toLocaleTimeString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
                         hour: '2-digit',
                         minute: '2-digit',
+                        hour12: true
                       })}
                     </TableCell>
                     <TableCell>

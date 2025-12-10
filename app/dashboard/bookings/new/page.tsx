@@ -266,14 +266,17 @@ export default function NewBookingPage() {
                 clientName: client.full_name,
                 serviceName: selectedService.name,
                 date: new Date(scheduledStart).toLocaleDateString('en-IN', {
+                  timeZone: 'Asia/Kolkata',
                   weekday: 'long',
                   day: 'numeric',
                   month: 'long',
                   year: 'numeric',
                 }),
                 time: new Date(scheduledStart).toLocaleTimeString('en-IN', {
+                  timeZone: 'Asia/Kolkata',
                   hour: '2-digit',
                   minute: '2-digit',
+                  hour12: true
                 }),
                 branch: selectedBranch.name,
               });

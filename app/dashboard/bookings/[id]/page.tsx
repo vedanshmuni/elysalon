@@ -150,7 +150,17 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Booking Details</h1>
             <p className="text-muted-foreground">
-              {formatDate(booking.scheduled_start)} at {new Date(booking.scheduled_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+              {new Date(booking.scheduled_start).toLocaleDateString('en-IN', { 
+                timeZone: 'Asia/Kolkata',
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+              })} at {new Date(booking.scheduled_start).toLocaleTimeString('en-IN', { 
+                timeZone: 'Asia/Kolkata',
+                hour: '2-digit', 
+                minute: '2-digit',
+                hour12: true 
+              })}
             </p>
           </div>
         </div>
@@ -294,11 +304,26 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
               </div>
               <div>
                 <span className="text-muted-foreground">Date:</span>
-                <p className="font-medium">{formatDate(booking.scheduled_start)}</p>
+                <p className="font-medium">{new Date(booking.scheduled_start).toLocaleDateString('en-IN', { 
+                  timeZone: 'Asia/Kolkata',
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric'
+                })}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Time:</span>
-                <p className="font-medium">{new Date(booking.scheduled_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - {new Date(booking.scheduled_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
+                <p className="font-medium">{new Date(booking.scheduled_start).toLocaleTimeString('en-IN', { 
+                  timeZone: 'Asia/Kolkata',
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  hour12: true 
+                })} - {new Date(booking.scheduled_end).toLocaleTimeString('en-IN', { 
+                  timeZone: 'Asia/Kolkata',
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  hour12: true 
+                })}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Duration:</span>

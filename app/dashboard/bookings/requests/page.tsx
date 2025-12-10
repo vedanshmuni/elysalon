@@ -183,6 +183,7 @@ export default function BookingRequestsPage() {
       // Format date and time for message
       const bookingDate = new Date(selectedRequest.parsed_date!);
       const dateDisplay = bookingDate.toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
         weekday: 'long',
         day: 'numeric',
         month: 'long',
@@ -254,6 +255,7 @@ export default function BookingRequestsPage() {
       // Format date for message
       const bookingDate = request.parsed_date ? new Date(request.parsed_date) : null;
       const dateDisplay = bookingDate ? bookingDate.toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
         weekday: 'long',
         day: 'numeric',
         month: 'long'
@@ -385,6 +387,7 @@ export default function BookingRequestsPage() {
                         </p>
                         <p className="text-sm text-blue-800">
                           📅 <strong>Date:</strong> {new Date(request.parsed_date).toLocaleDateString('en-IN', { 
+                            timeZone: 'Asia/Kolkata',
                             weekday: 'long', 
                             day: 'numeric', 
                             month: 'long', 
@@ -460,6 +463,7 @@ export default function BookingRequestsPage() {
                 <p className="font-medium text-sm text-blue-900 mt-3">Date & Time:</p>
                 <p className="text-sm">
                   {selectedRequest.parsed_date && new Date(selectedRequest.parsed_date).toLocaleDateString('en-IN', { 
+                    timeZone: 'Asia/Kolkata',
                     weekday: 'long', 
                     day: 'numeric', 
                     month: 'long', 

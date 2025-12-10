@@ -193,7 +193,7 @@ export default async function CalendarPage({
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">
                   <div className="text-muted-foreground">
-                    {date.toLocaleDateString('en-US', { weekday: 'short' })}
+                    {date.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short' })}
                   </div>
                   <div className={isToday ? 'text-blue-600 font-bold' : ''}>
                     {date.getDate()}
@@ -210,7 +210,12 @@ export default async function CalendarPage({
                         }`}
                       >
                         <div className="font-medium">
-                          {new Date(booking.scheduled_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(booking.scheduled_start).toLocaleTimeString('en-IN', { 
+                            timeZone: 'Asia/Kolkata',
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            hour12: true 
+                          })}
                         </div>
                         <div className="truncate">{booking.client?.full_name || 'Walk-in'}</div>
                         <div className="text-[10px] text-muted-foreground truncate">

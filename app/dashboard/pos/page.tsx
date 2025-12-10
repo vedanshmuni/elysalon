@@ -500,6 +500,7 @@ export default function POSPage() {
                     {clientBookings.map((booking) => (
                       <option key={booking.id} value={booking.id}>
                         {new Date(booking.scheduled_start).toLocaleTimeString('en-IN', {
+                          timeZone: 'Asia/Kolkata',
                           hour: '2-digit',
                           minute: '2-digit',
                           hour12: true
