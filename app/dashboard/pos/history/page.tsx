@@ -15,10 +15,14 @@ import {
 } from '@/components/ui/table';
 import { ArrowLeft, Receipt, Download } from 'lucide-react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { formatDate } from '@/lib/utils/date';
 import { formatCurrency } from '@/lib/utils/currency';
 
 export default function POSHistoryPage() {
+  const searchParams = useSearchParams();
+  const invoiceId = searchParams.get('invoice');
+  const autoPrint = searchParams.get('print') === 'true';
   async function generateInvoicePDF(invoice: any) {
     const supabase = createClient();
     
@@ -216,6 +220,26 @@ export default function POSHistoryPage() {
 
     const tenantId = profile?.default_tenant_id;
     if (!tenantId) return;
+
+    // If invoice ID is provided, auto-print that invoice
+    if (invoiceId) {
+      const { data: invoice } = await supabase
+        .from('invoices')
+        .select('*')
+        .eq('id', invoiceId)
+        .single();
+      
+      if (invoice) {
+        await generateInvoicePDF(invoice);
+        if (autoPrint) {
+          // Auto-trigger print after a short delay
+          setTimeout(() => {
+            window.print();
+          }, 1000);
+        }
+      }
+      return;
+    }
 
     // Set default date range (last 30 days)
     const today = new Date();

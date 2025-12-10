@@ -52,6 +52,10 @@ export async function POST(request: NextRequest) {
       `• ${item.name} x${item.quantity} - ₹${Number(item.total).toFixed(2)}`
     ).join('\n');
 
+    // Generate PDF link (opens in browser, prints to PDF)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://elysalon.onrender.com';
+    const pdfLink = `${appUrl}/dashboard/pos/history?invoice=${invoice.id}&print=true`;
+
     const invoiceText = `🧾 *INVOICE #${invoice.invoice_number}*\n\n` +
       `📅 Date: ${invoiceDate}\n` +
       `👤 Customer: ${client.full_name || 'Walk-in'}\n\n` +
@@ -63,6 +67,7 @@ export async function POST(request: NextRequest) {
       `━━━━━━━━━━━━━━━━\n` +
       `*Total Paid: ₹${Number(invoice.total).toFixed(2)}*\n\n` +
       `✅ Payment Status: PAID\n\n` +
+      `📄 View/Download PDF:\n${pdfLink}\n\n` +
       `Thank you for your business! 🙏\n` +
       `We look forward to serving you again! 💇✨`;
 
