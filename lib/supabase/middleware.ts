@@ -41,8 +41,13 @@ export async function updateSession(request: NextRequest) {
   const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path));
   const isOnboarding = request.nextUrl.pathname.startsWith('/onboarding');
   const isDebug = request.nextUrl.pathname.startsWith('/debug');
+  
+  // Webhook endpoints should be public (no auth required)
+  const isWebhook = request.nextUrl.pathname.startsWith('/api/whatsapp/webhook') ||
+                    request.nextUrl.pathname.startsWith('/api/cron/');
+  const isHealthCheck = request.nextUrl.pathname.startsWith('/api/health');
 
-  if (!user && !isPublicPath && !isOnboarding && !isDebug) {
+  if (!user && !isPublicPath && !isOnboarding && !isDebug && !isWebhook && !isHealthCheck) {
     // No user, redirect to login
     const url = request.nextUrl.clone();
     url.pathname = '/signin';

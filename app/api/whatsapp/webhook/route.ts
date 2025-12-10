@@ -41,25 +41,59 @@ function getPhoneVariations(phone: string): string[] {
  * Required by Meta to verify your webhook endpoint
  */
 export async function GET(request: NextRequest) {
-  console.log('🔔 GET /api/whatsapp/webhook - Verification request received');
+  console.log('\n========================================');
+  console.log('🔔 GET /api/whatsapp/webhook - VERIFICATION REQUEST');
+  console.log('========================================\n');
   
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get('hub.mode');
   const token = searchParams.get('hub.verify_token');
   const challenge = searchParams.get('hub.challenge');
 
-  console.log('Verification params:', { mode, token, challenge: challenge?.substring(0, 20) });
+  console.log('📋 Verification details:');
+  console.log('  Mode:', mode);
+  console.log('  Token received:', token);
+  console.log('  Challenge:', challenge?.substring(0, 50) + '...');
 
-  const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'elysalon_verify_token';
-  console.log('Expected token:', VERIFY_TOKEN);
+  const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+  console.log('  Expected token:', VERIFY_TOKEN);
+  console.log('  Token match:', token === VERIFY_TOKEN);
+  console.log('  Mode match:', mode === 'subscribe');
 
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('✅ Webhook verified successfully!');
-    return new NextResponse(challenge, { status: 200 });
+  // Check if environment variable is set
+  if (!VERIFY_TOKEN) {
+    console.error('❌ WHATSAPP_VERIFY_TOKEN environment variable is NOT set!');
+    console.error('💡 Set it in your Render dashboard environment variables');
+    return NextResponse.json({ 
+      error: 'Server configuration error',
+      message: 'WHATSAPP_VERIFY_TOKEN not configured' 
+    }, { status: 500 });
   }
 
-  console.log('❌ Verification failed - token mismatch');
-  return NextResponse.json({ error: 'Verification failed' }, { status: 403 });
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('✅ Webhook verified successfully!\n');
+    // Must return ONLY the challenge string as plain text
+    return new NextResponse(challenge, { 
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain',
+      }
+    });
+  }
+
+  console.log('❌ Verification failed');
+  if (mode !== 'subscribe') {
+    console.log('  Reason: Invalid mode:', mode);
+  }
+  if (token !== VERIFY_TOKEN) {
+    console.log('  Reason: Token mismatch');
+  }
+  console.log('\n');
+  
+  return NextResponse.json({ 
+    error: 'Verification failed',
+    details: 'Invalid verify token or mode'
+  }, { status: 403 });
 }
 
 /**
