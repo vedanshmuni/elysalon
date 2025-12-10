@@ -176,7 +176,7 @@ CREATE TABLE IF NOT EXISTS staff_performance (
 
 CREATE INDEX idx_staff_attendance_staff ON staff_attendance(staff_id, clock_in DESC);
 CREATE INDEX idx_staff_attendance_tenant ON staff_attendance(tenant_id, clock_in DESC);
-CREATE INDEX idx_staff_attendance_date ON staff_attendance(tenant_id, DATE(clock_in));
+CREATE INDEX idx_staff_attendance_date ON staff_attendance(tenant_id, (clock_in::date));
 CREATE INDEX idx_staff_attendance_status ON staff_attendance(status) WHERE status != 'clocked_out';
 
 CREATE INDEX idx_staff_breaks_attendance ON staff_breaks(attendance_id);
