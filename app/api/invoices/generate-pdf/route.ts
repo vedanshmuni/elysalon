@@ -44,15 +44,16 @@ export async function generateInvoicePDF(invoiceId: string) {
     // Generate HTML for PDF
     const invoiceHTML = generateInvoiceHTML(invoice);
 
-    // Generate PDF using Puppeteer
+    // Generate PDF using Puppeteer (uses bundled Chromium)
     const browser = await puppeteer.launch({
       headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--single-process',
+        '--no-zygote'
       ]
     });
     const page = await browser.newPage();
