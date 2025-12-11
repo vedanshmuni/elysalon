@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils/helpers';
 import { useState, useEffect } from 'react';
+import { useTenantFeatures } from '@/lib/features/hooks';
+import type { FeatureKey } from '@/lib/features/access';
 
 type UserRole = 'SUPER_ADMIN' | 'OWNER' | 'MANAGER' | 'STAFF' | 'CASHIER' | 'READ_ONLY';
 
@@ -33,33 +35,34 @@ interface NavItem {
   href: string;
   icon: any;
   allowedRoles: UserRole[];
+  requiredFeature?: FeatureKey; // NEW: Feature required to see this menu item
 }
 
 // Client-facing operations (front office)
 const clientOperations: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER', 'READ_ONLY'] },
-  { name: 'My Attendance', href: '/dashboard/staff/attendance/clock', icon: Clock, allowedRoles: ['STAFF', 'CASHIER'] }, // Staff/Cashier can clock in from client ops too
-  { name: 'My Leave', href: '/dashboard/staff/attendance/leave-requests', icon: CalendarDays, allowedRoles: ['STAFF', 'CASHIER'] }, // Staff can request leave
-  { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER'] },
-  { name: 'Booking Requests', href: '/dashboard/bookings/requests', icon: MessageSquare, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF'] },
-  { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF'] },
-  { name: 'Clients', href: '/dashboard/clients', icon: Users, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Staff can't see client details
-  { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'CASHIER'] }, // Only managers+ and cashiers
-  { name: 'Marketing', href: '/dashboard/marketing', icon: Mail, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] },
-  { name: 'WhatsApp Broadcasts', href: '/dashboard/broadcasts', icon: Send, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] },
+  { name: 'My Attendance', href: '/dashboard/staff/attendance/clock', icon: Clock, allowedRoles: ['STAFF', 'CASHIER'], requiredFeature: 'attendance_management' },
+  { name: 'My Leave', href: '/dashboard/staff/attendance/leave-requests', icon: CalendarDays, allowedRoles: ['STAFF', 'CASHIER'], requiredFeature: 'attendance_management' },
+  { name: 'Bookings', href: '/dashboard/bookings', icon: Calendar, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER'], requiredFeature: 'bookings' },
+  { name: 'Booking Requests', href: '/dashboard/bookings/requests', icon: MessageSquare, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF'], requiredFeature: 'bookings' },
+  { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF'], requiredFeature: 'calendar' },
+  { name: 'Clients', href: '/dashboard/clients', icon: Users, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'clients' },
+  { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'CASHIER'], requiredFeature: 'pos' },
+  { name: 'Marketing', href: '/dashboard/marketing', icon: Mail, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'marketing' },
+  { name: 'WhatsApp Broadcasts', href: '/dashboard/broadcasts', icon: Send, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'broadcasts' },
 ];
 
 // Internal operations (back office)
 const internalOperations: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER', 'READ_ONLY'] },
-  { name: 'My Attendance', href: '/dashboard/staff/attendance/clock', icon: Clock, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER'] }, // Everyone can clock in
-  { name: 'Staff Management', href: '/dashboard/staff', icon: Users, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Only managers+
-  { name: 'All Attendance', href: '/dashboard/staff/attendance', icon: Clock, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Only managers+ can see all
-  { name: 'Leave Requests', href: '/dashboard/staff/attendance/leave-requests', icon: CalendarDays, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Managers can approve leave
-  { name: 'Services', href: '/dashboard/services', icon: Package, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] },
-  { name: 'Inventory', href: '/dashboard/inventory', icon: Package, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Staff can't see inventory
-  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'] }, // Staff can't see analytics
-  { name: 'Settings', href: '/dashboard/settings', icon: Settings, allowedRoles: ['SUPER_ADMIN', 'OWNER'] }, // Only owner+
+  { name: 'My Attendance', href: '/dashboard/staff/attendance/clock', icon: Clock, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER'], requiredFeature: 'attendance_management' },
+  { name: 'Staff Management', href: '/dashboard/staff', icon: Users, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'staff' },
+  { name: 'All Attendance', href: '/dashboard/staff/attendance', icon: Clock, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'attendance_management' },
+  { name: 'Leave Requests', href: '/dashboard/staff/attendance/leave-requests', icon: CalendarDays, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'attendance_management' },
+  { name: 'Services', href: '/dashboard/services', icon: Package, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'services' },
+  { name: 'Inventory', href: '/dashboard/inventory', icon: Package, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'inventory' },
+  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'analytics' },
+  { name: 'Settings', href: '/dashboard/settings', icon: Settings, allowedRoles: ['SUPER_ADMIN', 'OWNER'] },
 ];
 
 export function Sidebar() {
@@ -69,6 +72,9 @@ export function Sidebar() {
   const [userRole, setUserRole] = useState<UserRole>('STAFF');
   const [userName, setUserName] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  
+  // Get tenant features for filtering navigation
+  const { features, planCode } = useTenantFeatures();
 
   // Load user role and view mode
   useEffect(() => {
@@ -126,14 +132,27 @@ export function Sidebar() {
     router.refresh();
   };
 
-  // Filter navigation based on user role
-  const filterByRole = (items: NavItem[]) => {
-    return items.filter(item => item.allowedRoles.includes(userRole));
+  // Filter navigation based on user role AND plan features
+  const filterByRoleAndFeatures = (items: NavItem[]) => {
+    return items.filter(item => {
+      // First check role
+      if (!item.allowedRoles.includes(userRole)) {
+        return false;
+      }
+      
+      // Then check feature access (if required)
+      if (item.requiredFeature && features) {
+        return features[item.requiredFeature] === true;
+      }
+      
+      // If no feature required or features not loaded yet, show item
+      return true;
+    });
   };
 
   const navigation = viewMode === 'client' 
-    ? filterByRole(clientOperations) 
-    : filterByRole(internalOperations);
+    ? filterByRoleAndFeatures(clientOperations) 
+    : filterByRoleAndFeatures(internalOperations);
 
   // Check if user can see internal operations toggle
   const canSeeInternalOps = ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'STAFF', 'CASHIER'].includes(userRole);
