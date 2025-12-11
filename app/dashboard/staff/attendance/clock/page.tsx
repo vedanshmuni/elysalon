@@ -154,7 +154,7 @@ export default function ClockInPage() {
       console.log('Looking for staff with user_id:', user.id, 'email:', user.email);
       const { data: myStaff, error: staffError } = await supabase
         .from('staff')
-        .select('id, display_name, phone, user_id')
+        .select('id, display_name, user_id')
         .eq('tenant_id', profile.default_tenant_id)
         .eq('user_id', user.id)
         .eq('is_active', true)
@@ -175,7 +175,7 @@ export default function ClockInPage() {
       if (['SUPER_ADMIN', 'OWNER', 'MANAGER'].includes(role)) {
         const { data: staffData } = await supabase
           .from('staff')
-          .select('id, display_name, phone, user_id')
+          .select('id, display_name, user_id')
           .eq('tenant_id', profile.default_tenant_id)
           .eq('is_active', true)
           .order('display_name');
