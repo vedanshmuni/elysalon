@@ -66,7 +66,11 @@ export default async function AttendanceDetailPage({
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
+    if (!dateString) return 'Invalid Date';
+    // For DATE fields (YYYY-MM-DD), append time to avoid timezone issues
+    const date = new Date(dateString + 'T12:00:00');
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    return date.toLocaleDateString('en-IN', {
       timeZone: 'Asia/Kolkata',
       weekday: 'long',
       year: 'numeric',
