@@ -287,16 +287,6 @@ export default function LeaveRequestsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Debug info - remove after fixing */}
-      <div className="p-4 bg-gray-100 rounded text-xs font-mono">
-        <div>Role: {userRole || '(empty)'}</div>
-        <div>isManager: {String(isManager)}</div>
-        <div>tenantId: {tenantId || '(empty)'}</div>
-        <div>currentStaffId: {currentStaffId || '(empty)'}</div>
-        <div>leaveRequests.length: {leaveRequests.length}</div>
-        <div>leaveTypes.length: {leaveTypes.length}</div>
-      </div>
-      
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/dashboard/staff/attendance">

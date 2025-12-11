@@ -444,16 +444,240 @@ export default function ClockInPage() {
     );
   }
 
-  // No staff record found for this user
+  // Managers without staff record - show staff selector
+  if (isManager && !myStaffRecord) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Staff Attendance Management</h1>
+            <p className="text-muted-foreground">Manage staff clock in/out</p>
+          </div>
+          <Link href="/dashboard/staff/attendance">
+            <Button variant="outline">
+              <Clock className="mr-2 h-4 w-4" />
+              View All Attendance
+            </Button>
+          </Link>
+        </div>
+
+        {allStaff.length > 0 ? (
+          <>
+            {/* Staff Selection */}
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <User className="h-5 w-5 text-muted-foreground" />
+                  <div className="flex-1">
+                    <Label className="text-sm text-muted-foreground">Select a staff member to manage:</Label>
+                    <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Select staff member..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allStaff.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.display_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Message Alert */}
+            {message && (
+              <div className={`p-4 rounded-lg flex items-center gap-3 ${
+                message.type === 'success' 
+                  ? 'bg-green-50 text-green-800 border border-green-200' 
+                  : 'bg-red-50 text-red-800 border border-red-200'
+              }`}>
+                {message.type === 'success' ? (
+                  <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+                ) : (
+                  <XCircle className="h-5 w-5 flex-shrink-0" />
+                )}
+                <span>{message.text}</span>
+              </div>
+            )}
+
+            {/* Show attendance card only when staff is selected */}
+            {selectedStaffId && (
+              <Card className="overflow-hidden">
+                {/* Status Header */}
+                <div className={`p-6 text-white ${
+                  currentAttendance?.status === 'clocked_in' 
+                    ? 'bg-gradient-to-r from-green-500 to-green-600' 
+                    : currentAttendance?.status === 'on_break'
+                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500'
+                    : currentAttendance?.status === 'clocked_out'
+                    ? 'bg-gradient-to-r from-gray-500 to-gray-600'
+                    : 'bg-gradient-to-r from-blue-500 to-indigo-600'
+                }`}>
+                  <div className="text-center">
+                    <p className="text-lg opacity-90 mb-2">{selectedStaffName}</p>
+                    <div className="text-5xl font-bold mb-1">{formatTime(currentTime)}</div>
+                    <div className="text-lg opacity-80">{formatDate(currentTime)}</div>
+
+                    <div className="mt-4">
+                      {!currentAttendance || currentAttendance.status === 'clocked_out' ? (
+                        <span className="inline-flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full">
+                          <XCircle className="h-4 w-4" />
+                          Not Clocked In
+                        </span>
+                      ) : currentAttendance.status === 'clocked_in' ? (
+                        <span className="inline-flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full">
+                          <CheckCircle2 className="h-4 w-4" />
+                          Working
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 bg-white/20 px-4 py-2 rounded-full">
+                          <Coffee className="h-4 w-4" />
+                          On Break
+                        </span>
+                      )}
+                    </div>
+
+                    {elapsedTime && currentAttendance?.status !== 'clocked_out' && (
+                      <div className="mt-4 flex items-center justify-center gap-2">
+                        <Timer className="h-5 w-5" />
+                        <span className="text-2xl font-mono">{elapsedTime}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <CardContent className="p-6">
+                  {/* Clock In Button */}
+                  {(!currentAttendance || currentAttendance.status === 'clocked_out') && (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label>Notes (Optional)</Label>
+                        <Textarea
+                          placeholder="Add any notes for clocking in..."
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                          rows={2}
+                        />
+                      </div>
+                      <Button
+                        onClick={handleClockIn}
+                        disabled={loading}
+                        className="w-full h-14 text-lg bg-green-600 hover:bg-green-700"
+                      >
+                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogIn className="mr-2 h-5 w-5" />}
+                        Clock In
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Clock Out & Break buttons */}
+                  {currentAttendance?.status === 'clocked_in' && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Break Type</Label>
+                          <Select value={breakType} onValueChange={setBreakType}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="regular">Regular Break</SelectItem>
+                              <SelectItem value="lunch">Lunch Break</SelectItem>
+                              <SelectItem value="tea">Tea Break</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-end">
+                          <Button
+                            onClick={handleStartBreak}
+                            disabled={loading}
+                            variant="outline"
+                            className="w-full h-10 border-yellow-300 text-yellow-700 hover:bg-yellow-50"
+                          >
+                            <Coffee className="mr-2 h-4 w-4" />
+                            Start Break
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Clock Out Notes (Optional)</Label>
+                        <Textarea
+                          placeholder="Add any notes for clocking out..."
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                          rows={2}
+                        />
+                      </div>
+                      <Button
+                        onClick={handleClockOut}
+                        disabled={loading}
+                        variant="destructive"
+                        className="w-full h-14 text-lg"
+                      >
+                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <LogOut className="mr-2 h-5 w-5" />}
+                        Clock Out
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* End Break button */}
+                  {currentAttendance?.status === 'on_break' && (
+                    <Button
+                      onClick={handleEndBreak}
+                      disabled={loading}
+                      className="w-full h-14 text-lg bg-green-600 hover:bg-green-700"
+                    >
+                      {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="mr-2 h-5 w-5" />}
+                      End Break & Resume Work
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {!selectedStaffId && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">Select a staff member above to manage their attendance</p>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        ) : (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold mb-2">No Staff Found</h2>
+              <p className="text-muted-foreground mb-4">Add staff members first to manage attendance.</p>
+              <Link href="/dashboard/staff">
+                <Button>Go to Staff Management</Button>
+              </Link>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // No staff record found for this user (non-manager)
   if (!myStaffRecord && !isManager) {
     return (
       <div className="flex items-center justify-center min-h-[500px]">
         <Card className="max-w-md">
           <CardContent className="pt-6 text-center">
             <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">No Staff Record Found</h2>
-            <p className="text-muted-foreground">
-              Your account is not linked to a staff profile. Please contact your manager to set up your staff record.
+            <h2 className="text-xl font-semibold mb-2">Account Not Linked</h2>
+            <p className="text-muted-foreground mb-4">
+              Your login account is not linked to your staff profile. This needs to be done by your manager.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Ask your manager to go to <strong>Staff Management</strong> and link your account to your staff record.
             </p>
           </CardContent>
         </Card>

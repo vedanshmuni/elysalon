@@ -4,11 +4,11 @@ import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Link2, UserCheck, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 interface Branch {
@@ -16,12 +16,22 @@ interface Branch {
   name: string;
 }
 
+interface UnlinkedUser {
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: string;
+}
+
 export default function EditStaffPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [staff, setStaff] = useState<any>(null);
+  const [unlinkedUsers, setUnlinkedUsers] = useState<UnlinkedUser[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
 
   const [formData, setFormData] = useState({
     display_name: '',
@@ -39,9 +49,7 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
 
   async function loadData() {
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data: profile } = await supabase
@@ -63,8 +71,8 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
     if (staffData) {
       setStaff(staffData);
       setFormData({
-        display_name: staffData.display_name,
-        role_label: staffData.role_label,
+        display_name: staffData.display_name || '',
+        role_label: staffData.role_label || '',
         branch_id: staffData.branch_id || '',
         skills: staffData.skills || '',
         target_service_revenue: staffData.target_service_revenue || 0,
@@ -82,6 +90,71 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
       .order('name');
 
     setBranches(branchesData || []);
+
+    // If staff has no user_id, load unlinked users
+    if (!staffData?.user_id) {
+      const { data: tenantUsers } = await supabase
+        .from('tenant_users')
+        .select('user_id, role')
+        .eq('tenant_id', tenantId);
+
+      if (tenantUsers && tenantUsers.length > 0) {
+        const { data: linkedStaff } = await supabase
+          .from('staff')
+          .select('user_id')
+          .eq('tenant_id', tenantId)
+          .not('user_id', 'is', null);
+
+        const linkedUserIds = new Set((linkedStaff || []).map(s => s.user_id));
+        
+        const unlinkedUserIds = tenantUsers
+          .filter(tu => !linkedUserIds.has(tu.user_id))
+          .map(tu => ({ user_id: tu.user_id, role: tu.role }));
+
+        if (unlinkedUserIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, email, full_name')
+            .in('id', unlinkedUserIds.map(u => u.user_id));
+
+          const unlinked = unlinkedUserIds.map(u => {
+            const prof = profiles?.find(p => p.id === u.user_id);
+            return {
+              user_id: u.user_id,
+              email: prof?.email || 'Unknown',
+              full_name: prof?.full_name || 'Unknown',
+              role: u.role,
+            };
+          });
+
+          setUnlinkedUsers(unlinked);
+        }
+      }
+    }
+  }
+
+  async function handleLinkUser() {
+    if (!selectedUserId || !staff) return;
+    
+    setLinking(true);
+    try {
+      const supabase = createClient();
+      
+      const { error } = await supabase
+        .from('staff')
+        .update({ user_id: selectedUserId })
+        .eq('id', staff.id);
+
+      if (error) throw error;
+
+      alert('User account linked successfully!');
+      loadData();
+    } catch (error: any) {
+      console.error('Error linking user:', error);
+      alert(error.message || 'Failed to link user account');
+    } finally {
+      setLinking(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -118,7 +191,7 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
   }
 
   if (!staff) {
-    return <div>Loading...</div>;
+    return <div className="flex items-center justify-center min-h-[400px]">Loading...</div>;
   }
 
   return (
@@ -134,6 +207,76 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
           <p className="text-muted-foreground">Update staff information</p>
         </div>
       </div>
+
+      {/* Link User Account Card */}
+      {!staff.user_id && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-yellow-800">
+              <AlertCircle className="h-5 w-5" />
+              Account Not Linked
+            </CardTitle>
+            <CardDescription className="text-yellow-700">
+              This staff member doesn&apos;t have a login account linked. They won&apos;t be able to clock in/out or access the system.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {unlinkedUsers.length > 0 ? (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Select a user account to link:</Label>
+                  <select
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="">Select a user...</option>
+                    {unlinkedUsers.map((user) => (
+                      <option key={user.user_id} value={user.user_id}>
+                        {user.full_name} ({user.email}) - {user.role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleLinkUser}
+                  disabled={!selectedUserId || linking}
+                  className="bg-yellow-600 hover:bg-yellow-700"
+                >
+                  <Link2 className="mr-2 h-4 w-4" />
+                  {linking ? 'Linking...' : 'Link Account'}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-yellow-700">
+                No unlinked user accounts found. Users need to sign up first, or you can create a new staff account from the{' '}
+                <Link href="/dashboard/staff/create-account" className="underline font-medium">
+                  Create Staff Account
+                </Link>{' '}
+                page.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Linked Account Info */}
+      {staff.user_id && (
+        <Card className="border-green-200 bg-green-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-green-800">
+              <UserCheck className="h-5 w-5" />
+              Account Linked
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-green-700">
+              This staff member is linked to: <strong>{staff.users?.email || 'Unknown email'}</strong>
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       <form onSubmit={handleSubmit}>
         <div className="grid gap-6">
@@ -160,7 +303,7 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
                     id="role_label"
                     value={formData.role_label}
                     onChange={(e) => setFormData({ ...formData, role_label: e.target.value })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     required
                   >
                     <option value="">Select Role</option>
@@ -180,7 +323,7 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
                     id="branch_id"
                     value={formData.branch_id}
                     onChange={(e) => setFormData({ ...formData, branch_id: e.target.value })}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="">No Assignment</option>
                     {branches.map((branch) => (
@@ -193,7 +336,7 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
 
                 <div className="space-y-2">
                   <Label>Email (Read-only)</Label>
-                  <Input value={staff.users?.email || 'N/A'} disabled />
+                  <Input value={staff.users?.email || 'Not linked'} disabled />
                 </div>
               </div>
 
@@ -224,12 +367,7 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
                     min="0"
                     step="0.01"
                     value={formData.target_service_revenue}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        target_service_revenue: parseFloat(e.target.value),
-                      })
-                    }
+                    onChange={(e) => setFormData({ ...formData, target_service_revenue: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
 
@@ -241,12 +379,7 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
                     min="0"
                     step="0.01"
                     value={formData.target_retail_revenue}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        target_retail_revenue: parseFloat(e.target.value),
-                      })
-                    }
+                    onChange={(e) => setFormData({ ...formData, target_retail_revenue: parseFloat(e.target.value) || 0 })}
                   />
                 </div>
               </div>
@@ -275,7 +408,7 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
         </div>
 
         <div className="flex justify-end gap-4 mt-6">
-          <Link href={`/dashboard/staff/${params.id}`}>
+          <Link href={`/dashboard/staff/${id}`}>
             <Button type="button" variant="outline">
               Cancel
             </Button>
