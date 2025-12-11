@@ -14,7 +14,18 @@ export async function POST(request: NextRequest) {
     }
 
     const credentials = tenantId ? await getTenantWhatsAppCredentials(tenantId) : null;
-    await sendTextMessage(to, message, credentials || undefined);
+    
+    if (!credentials) {
+      return NextResponse.json(
+        { 
+          error: 'WhatsApp not configured',
+          message: 'Please configure WhatsApp credentials to send messages'
+        },
+        { status: 400 }
+      );
+    }
+    
+    await sendTextMessage(to, message, credentials);
 
     return NextResponse.json({ success: true });
   } catch (error) {

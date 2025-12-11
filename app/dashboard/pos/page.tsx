@@ -344,14 +344,24 @@ export default function POSPage() {
       // Send invoice via WhatsApp automatically
       const selectedClient = clients.find(c => c.id === invoiceData.client_id);
       if (selectedClient?.phone) {
-        // Send in background, don't wait for it
+        // Send in background, but check if it succeeds
         fetch('/api/invoices/send-whatsapp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ invoiceId: invoice.id }),
-        }).catch(err => console.error('Failed to send WhatsApp invoice:', err));
-        
-        alert(`✅ Payment processed!\n\nInvoice is being sent to ${selectedClient.full_name} via WhatsApp.`);
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) {
+              alert(`✅ Payment processed successfully!\n\n⚠️ WhatsApp invoice could not be sent: ${data.message || data.error}`);
+            } else {
+              alert(`✅ Payment processed!\n\nInvoice sent to ${selectedClient.full_name} via WhatsApp.`);
+            }
+          })
+          .catch(err => {
+            console.error('Failed to send WhatsApp invoice:', err);
+            alert(`✅ Payment processed successfully!\n\n⚠️ WhatsApp invoice could not be sent. Please check your WhatsApp settings.`);
+          });
       } else {
         alert('✅ Payment processed successfully!');
       }

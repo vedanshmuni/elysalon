@@ -120,7 +120,15 @@ export async function GET(request: NextRequest) {
         // Use sendTextMessage directly with custom message
         const { sendTextMessage } = await import('@/lib/whatsapp/client');
         const credentials = await getTenantWhatsAppCredentials(booking.tenant_id);
-        await sendTextMessage(booking.client.phone, reminderMessage, credentials || undefined);
+        
+        if (!credentials) {
+          console.warn(`WhatsApp not configured for tenant ${booking.tenant_id}, skipping reminder for booking ${booking.id}`);
+          results.failed++;
+          results.errors.push(`Booking ${booking.id}: WhatsApp not configured for tenant`);
+          continue;
+        }
+        
+        await sendTextMessage(booking.client.phone, reminderMessage, credentials);
 
         // Update booking to mark reminder as sent
         await supabase

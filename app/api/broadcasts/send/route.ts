@@ -113,8 +113,19 @@ export async function POST(request: NextRequest) {
       .update({ target_count: clients.length })
       .eq('id', broadcast.id);
 
-    // Send messages asynchronously (don't wait for completion)
+    // Check if WhatsApp is configured
     const credentials = await getTenantWhatsAppCredentials(tenantId);
+    if (!credentials) {
+      return NextResponse.json(
+        { 
+          error: 'WhatsApp not configured',
+          message: 'Please configure WhatsApp credentials in Settings to send broadcasts'
+        },
+        { status: 400 }
+      );
+    }
+
+    // Send messages asynchronously (don't wait for completion)
     sendBroadcastMessagesAsync(
       supabase,
       broadcast.id,

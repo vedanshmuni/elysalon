@@ -24,8 +24,7 @@ export async function POST(request: NextRequest) {
           phone,
           email
         ),
-        invoice_items (*),
-        tenant_id
+        invoice_items (*)
       `)
       .eq('id', invoiceId)
       .single();
@@ -76,6 +75,17 @@ export async function POST(request: NextRequest) {
     // Get tenant-specific WhatsApp credentials
     const credentials = await getTenantWhatsAppCredentials(invoice.tenant_id);
 
+    // Check if credentials are configured
+    if (!credentials) {
+      return NextResponse.json(
+        { 
+          error: 'WhatsApp not configured',
+          message: 'Please configure WhatsApp credentials in Settings > Tenant Settings to send invoices via WhatsApp'
+        },
+        { status: 400 }
+      );
+    }
+
     // Send single message with PDF attached and full invoice details as caption
     await sendWhatsAppMessage({
       to: client.phone,
@@ -85,7 +95,7 @@ export async function POST(request: NextRequest) {
         filename: `Invoice_${invoice.invoice_number}.pdf`,
         caption: caption
       }
-    }, credentials || undefined);
+    }, credentials);
 
     // Update invoice to mark as sent
     await supabase
