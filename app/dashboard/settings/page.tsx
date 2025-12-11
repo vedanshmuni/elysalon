@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Building, MapPin, DollarSign, Clock, Save } from 'lucide-react';
+import { Building, MapPin, DollarSign, Clock, Save, CreditCard } from 'lucide-react';
 import { AccessGuard } from '@/components/auth/AccessGuard';
+import Link from 'next/link';
 
 function SettingsContent() {
   const [loading, setLoading] = useState(false);
@@ -107,6 +108,28 @@ function SettingsContent() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
+        {/* Billing & Subscription */}
+        <Card className="md:col-span-2 border-primary/50 bg-primary/5">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Billing & Subscription
+              </CardTitle>
+              <Link href="/dashboard/settings/billing">
+                <Button variant="outline" size="sm">
+                  Manage Subscription
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              View your current plan, upgrade/downgrade, manage payment methods, and view billing history.
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Salon Profile */}
         <Card>
           <CardHeader>
