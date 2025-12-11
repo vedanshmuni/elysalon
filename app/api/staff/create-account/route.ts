@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { checkFeatureAccess } from '@/lib/features/api-guard';
 
 // Create Supabase client with service role for admin operations
 // Service role bypasses RLS policies
@@ -19,6 +20,10 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
+    // Check feature access
+    const featureCheck = await checkFeatureAccess('staff');
+    if (featureCheck) return featureCheck;
+
     const {
       tenantId,
       email,

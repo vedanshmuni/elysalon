@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendTextMessage } from '@/lib/whatsapp/client';
 import { getTenantWhatsAppCredentials } from '@/lib/whatsapp/server';
+import { checkFeatureAccess } from '@/lib/features/api-guard';
 
 export async function POST(request: NextRequest) {
   try {
+    // Check feature access
+    const featureCheck = await checkFeatureAccess('whatsapp');
+    if (featureCheck) return featureCheck;
+
     const { to, message, tenantId } = await request.json();
 
     if (!to || !message) {

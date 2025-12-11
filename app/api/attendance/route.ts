@@ -1,8 +1,13 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { checkFeatureAccess } from '@/lib/features/api-guard';
 
 export async function POST(request: NextRequest) {
   try {
+    // Check feature access - attendance management requires staff feature
+    const featureCheck = await checkFeatureAccess('attendance_management');
+    if (featureCheck) return featureCheck;
+
     const supabase = await createClient();
     const {
       data: { user },

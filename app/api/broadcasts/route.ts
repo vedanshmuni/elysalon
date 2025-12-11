@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { checkFeatureAccess } from '@/lib/features/api-guard';
 
 /**
  * GET /api/broadcasts
@@ -7,6 +8,10 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function GET(request: NextRequest) {
   try {
+    // Check feature access
+    const featureCheck = await checkFeatureAccess('broadcasts');
+    if (featureCheck) return featureCheck;
+
     const supabase = await createClient();
     
     // Authenticate user

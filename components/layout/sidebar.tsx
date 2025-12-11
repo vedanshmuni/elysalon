@@ -22,6 +22,7 @@ import {
   Clock,
   User,
   CalendarDays,
+  Gift,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/helpers';
 import { useState, useEffect } from 'react';
@@ -49,6 +50,7 @@ const clientOperations: NavItem[] = [
   { name: 'Clients', href: '/dashboard/clients', icon: Users, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'clients' },
   { name: 'POS', href: '/dashboard/pos', icon: ShoppingCart, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER', 'CASHIER'], requiredFeature: 'pos' },
   { name: 'Marketing', href: '/dashboard/marketing', icon: Mail, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'marketing' },
+  { name: 'Loyalty Program', href: '/dashboard/loyalty', icon: Gift, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'loyalty_programs' },
   { name: 'WhatsApp Broadcasts', href: '/dashboard/broadcasts', icon: Send, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'broadcasts' },
 ];
 
@@ -62,6 +64,7 @@ const internalOperations: NavItem[] = [
   { name: 'Services', href: '/dashboard/services', icon: Package, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'services' },
   { name: 'Inventory', href: '/dashboard/inventory', icon: Package, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'inventory' },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'analytics' },
+  { name: 'Loyalty Program', href: '/dashboard/loyalty', icon: Gift, allowedRoles: ['SUPER_ADMIN', 'OWNER', 'MANAGER'], requiredFeature: 'loyalty_programs' },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings, allowedRoles: ['SUPER_ADMIN', 'OWNER'] },
 ];
 

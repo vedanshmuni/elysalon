@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { getTenantFeatures, getTenantPlanCode, type FeatureKey } from './access';
 
+// Re-export FeatureKey for convenience
+export type { FeatureKey };
+
 /**
  * Hook to check feature access in React components
  */

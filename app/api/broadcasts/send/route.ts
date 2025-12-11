@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendBroadcastMessage } from '@/lib/whatsapp/client';
 import { getTenantWhatsAppCredentials } from '@/lib/whatsapp/server';
+import { checkFeatureAccess } from '@/lib/features/api-guard';
 
 /**
  * POST /api/broadcasts/send
@@ -9,6 +10,10 @@ import { getTenantWhatsAppCredentials } from '@/lib/whatsapp/server';
  */
 export async function POST(request: NextRequest) {
   try {
+    // Check feature access
+    const featureCheck = await checkFeatureAccess('broadcasts');
+    if (featureCheck) return featureCheck;
+
     const supabase = await createClient();
     
     // Authenticate user
