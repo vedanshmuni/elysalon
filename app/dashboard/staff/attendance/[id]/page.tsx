@@ -100,7 +100,13 @@ export default async function AttendanceDetailPage({
           </Link>
           <h1 className="text-3xl font-bold">Attendance Details</h1>
           <p className="text-muted-foreground">
-            {formatDate(attendance.date)}
+            {attendance.clock_in ? new Date(attendance.clock_in).toLocaleDateString('en-IN', {
+              timeZone: 'Asia/Kolkata',
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            }) : 'Date not available'}
           </p>
         </div>
       </div>
