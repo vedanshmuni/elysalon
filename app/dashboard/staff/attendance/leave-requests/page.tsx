@@ -121,11 +121,11 @@ export default function LeaveRequestsPage() {
       
       // Now fetch related data separately if requests exist
       if (requests && requests.length > 0) {
-        // Fetch staff names
+        // Fetch staff names (without phone column)
         const staffIds = [...new Set(requests.map(r => r.staff_id))];
         const { data: staffData } = await supabase
           .from('staff')
-          .select('id, display_name, phone')
+          .select('id, display_name')
           .in('id', staffIds);
         
         // Fetch leave types

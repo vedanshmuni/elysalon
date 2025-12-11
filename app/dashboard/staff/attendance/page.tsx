@@ -46,7 +46,7 @@ export default async function AttendancePage() {
     .from('staff_attendance')
     .select(`
       *,
-      staff:staff(id, display_name, phone),
+      staff:staff(id, display_name),
       branch:branches(name)
     `)
     .eq('tenant_id', tenantId)
