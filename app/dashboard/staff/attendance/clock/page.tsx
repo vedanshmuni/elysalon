@@ -256,8 +256,8 @@ export default function ClockInPage() {
           tenant_id: tenantId,
           staff_id: selectedStaffId,
           clock_in: new Date().toISOString(),
-          clock_in_latitude: location?.lat,
-          clock_in_longitude: location?.lng,
+          clock_in_lat: location?.lat,
+          clock_in_lng: location?.lng,
           clock_in_notes: notes || null,
           status: 'clocked_in',
         })
@@ -304,8 +304,8 @@ export default function ClockInPage() {
         .from('staff_attendance')
         .update({
           clock_out: clockOutTime.toISOString(),
-          clock_out_latitude: location?.lat,
-          clock_out_longitude: location?.lng,
+          clock_out_lat: location?.lat,
+          clock_out_lng: location?.lng,
           clock_out_notes: notes || null,
           status: 'clocked_out',
           total_hours: Math.round(totalHours * 100) / 100,

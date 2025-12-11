@@ -182,11 +182,11 @@ export default async function AttendanceDetailPage({
                   <MapPin className="h-4 w-4" />
                   Clock In Location
                 </p>
-                {attendance.clock_in_latitude && attendance.clock_in_longitude ? (
+                {attendance.clock_in_lat && attendance.clock_in_lng ? (
                   <iframe
                     className="w-full h-32 rounded-lg border mt-2"
                     loading="lazy"
-                    src={`https://www.google.com/maps?q=${attendance.clock_in_latitude},${attendance.clock_in_longitude}&output=embed`}
+                    src={`https://www.google.com/maps?q=${attendance.clock_in_lat},${attendance.clock_in_lng}&output=embed`}
                   />
                 ) : (
                   <p className="text-sm mt-1">Not recorded</p>
@@ -217,11 +217,11 @@ export default async function AttendanceDetailPage({
                   <MapPin className="h-4 w-4" />
                   Clock Out Location
                 </p>
-                {attendance.clock_out_latitude && attendance.clock_out_longitude ? (
+                {attendance.clock_out_lat && attendance.clock_out_lng ? (
                   <iframe
                     className="w-full h-32 rounded-lg border mt-2"
                     loading="lazy"
-                    src={`https://www.google.com/maps?q=${attendance.clock_out_latitude},${attendance.clock_out_longitude}&output=embed`}
+                    src={`https://www.google.com/maps?q=${attendance.clock_out_lat},${attendance.clock_out_lng}&output=embed`}
                   />
                 ) : (
                   <p className="text-sm mt-1">Not recorded</p>
