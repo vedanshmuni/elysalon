@@ -151,13 +151,20 @@ export default function ClockInPage() {
       setUserRole(role);
 
       // Get current user's staff record
-      const { data: myStaff } = await supabase
+      console.log('Looking for staff with user_id:', user.id, 'email:', user.email);
+      const { data: myStaff, error: staffError } = await supabase
         .from('staff')
         .select('id, display_name, phone, user_id')
         .eq('tenant_id', profile.default_tenant_id)
         .eq('user_id', user.id)
         .eq('is_active', true)
         .maybeSingle();
+
+      if (staffError) {
+        console.error('Error fetching staff:', staffError);
+      }
+      
+      console.log('Found staff record:', myStaff);
 
       if (myStaff) {
         setMyStaffRecord(myStaff);

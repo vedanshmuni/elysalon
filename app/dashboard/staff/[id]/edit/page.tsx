@@ -68,6 +68,8 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
       .eq('id', id)
       .single();
 
+    console.log('Staff data loaded:', { id: staffData?.id, display_name: staffData?.display_name, user_id: staffData?.user_id });
+
     if (staffData) {
       // If staff has user_id, fetch email from profiles
       if (staffData.user_id) {
@@ -76,6 +78,8 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
           .select('email')
           .eq('id', staffData.user_id)
           .single();
+        
+        console.log('Profile data for user_id:', staffData.user_id, '→', profileData);
         
         if (profileData) {
           staffData.user_email = profileData.email;
