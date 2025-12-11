@@ -43,6 +43,18 @@ interface BookingItem {
   duration_minutes?: number;
 }
 
+interface StaffConflict {
+  staff_id: string;
+  staff_name: string;
+  conflicting_bookings: Array<{
+    id: string;
+    client_name: string;
+    service_name: string;
+    scheduled_start: string;
+    scheduled_end: string;
+  }>;
+}
+
 export default function NewBookingPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -72,9 +84,23 @@ export default function NewBookingPage() {
     { service_id: '', staff_id: '' },
   ]);
 
+  const [staffConflicts, setStaffConflicts] = useState<StaffConflict[]>([]);
+  const [showConflictWarning, setShowConflictWarning] = useState(false);
+  const [proceedWithConflicts, setProceedWithConflicts] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
+
+  // Check staff availability whenever date, time, or staff selection changes
+  useEffect(() => {
+    if (formData.scheduled_date && formData.scheduled_time && bookingItems.some(item => item.staff_id)) {
+      checkStaffAvailability();
+    } else {
+      setStaffConflicts([]);
+      setShowConflictWarning(false);
+    }
+  }, [formData.scheduled_date, formData.scheduled_time, bookingItems]);
 
   async function loadData() {
     const supabase = createClient();
@@ -156,6 +182,73 @@ export default function NewBookingPage() {
     }
 
     setBookingItems(updated);
+    setProceedWithConflicts(false); // Reset conflict override when changing selections
+  }
+
+  async function checkStaffAvailability() {
+    if (!formData.scheduled_date || !formData.scheduled_time || !tenantId) return;
+
+    const supabase = createClient();
+    const conflicts: StaffConflict[] = [];
+
+    // Calculate total duration for the booking
+    const totalDuration = bookingItems.reduce((sum, item) => sum + (item.duration_minutes || 0), 0);
+    const scheduledStart = new Date(`${formData.scheduled_date}T${formData.scheduled_time}`);
+    const scheduledEnd = new Date(scheduledStart.getTime() + totalDuration * 60000);
+
+    // Check each staff member for conflicts
+    for (const item of bookingItems) {
+      if (!item.staff_id) continue;
+
+      const staffMember = staff.find(s => s.id === item.staff_id);
+      if (!staffMember) continue;
+
+      // Query overlapping bookings for this staff member
+      const { data: overlappingBookings, error } = await supabase
+        .from('bookings')
+        .select(`
+          id,
+          scheduled_start,
+          scheduled_end,
+          status,
+          client:clients (
+            full_name
+          ),
+          booking_items!inner (
+            staff_id,
+            service:services (
+              name
+            )
+          )
+        `)
+        .eq('tenant_id', tenantId)
+        .eq('booking_items.staff_id', item.staff_id)
+        .in('status', ['PENDING', 'CONFIRMED', 'IN_PROGRESS'])
+        .lt('scheduled_start', scheduledEnd.toISOString())
+        .gt('scheduled_end', scheduledStart.toISOString());
+
+      if (error) {
+        console.error('Error checking staff availability:', error);
+        continue;
+      }
+
+      if (overlappingBookings && overlappingBookings.length > 0) {
+        conflicts.push({
+          staff_id: item.staff_id,
+          staff_name: staffMember.display_name,
+          conflicting_bookings: overlappingBookings.map(booking => ({
+            id: booking.id,
+            client_name: (booking.client as any)?.full_name || 'Walk-in',
+            service_name: booking.booking_items?.[0]?.service?.name || 'Service',
+            scheduled_start: booking.scheduled_start,
+            scheduled_end: booking.scheduled_end,
+          })),
+        });
+      }
+    }
+
+    setStaffConflicts(conflicts);
+    setShowConflictWarning(conflicts.length > 0);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -174,6 +267,13 @@ export default function NewBookingPage() {
 
       if (bookingItems.some((item) => !item.service_id || !item.staff_id)) {
         alert('Please select service and staff for all items');
+        setLoading(false);
+        return;
+      }
+
+      // Check for staff conflicts and require user confirmation
+      if (staffConflicts.length > 0 && !proceedWithConflicts) {
+        alert('Staff members have conflicting bookings. Please review the warnings and confirm to proceed.');
         setLoading(false);
         return;
       }
@@ -474,6 +574,69 @@ export default function NewBookingPage() {
             </CardContent>
           </Card>
 
+          {/* Staff Availability Warning */}
+          {showConflictWarning && staffConflicts.length > 0 && (
+            <Card className="border-red-500 bg-red-50">
+              <CardHeader>
+                <CardTitle className="text-red-700 flex items-center gap-2">
+                  ⚠️ Staff Availability Conflicts Detected
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {staffConflicts.map((conflict) => (
+                  <div key={conflict.staff_id} className="bg-white rounded-lg p-4 border border-red-200">
+                    <h4 className="font-semibold text-red-700 mb-2">
+                      {conflict.staff_name} is already booked
+                    </h4>
+                    <div className="space-y-2">
+                      {conflict.conflicting_bookings.map((booking) => (
+                        <div key={booking.id} className="text-sm text-gray-700 pl-4 border-l-2 border-red-300">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-medium">{booking.client_name} - {booking.service_name}</p>
+                              <p className="text-gray-600">
+                                {new Date(booking.scheduled_start).toLocaleString('en-IN', {
+                                  timeZone: 'Asia/Kolkata',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })}
+                                {' - '}
+                                {new Date(booking.scheduled_end).toLocaleString('en-IN', {
+                                  timeZone: 'Asia/Kolkata',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                
+                <div className="flex items-start gap-3 bg-white rounded-lg p-4 border border-red-300">
+                  <input
+                    type="checkbox"
+                    id="proceedWithConflicts"
+                    checked={proceedWithConflicts}
+                    onChange={(e) => setProceedWithConflicts(e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-red-300 text-red-600 focus:ring-red-500"
+                  />
+                  <label htmlFor="proceedWithConflicts" className="text-sm">
+                    <span className="font-semibold text-red-700">I understand and want to proceed anyway</span>
+                    <p className="text-gray-600 mt-1">
+                      By checking this box, you confirm that you want to create this booking despite the scheduling conflicts. 
+                      This may result in double-booking the staff member(s).
+                    </p>
+                  </label>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Services & Staff */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -484,7 +647,11 @@ export default function NewBookingPage() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              {bookingItems.map((item, index) => (
+              {bookingItems.map((item, index) => {
+                // Check if this specific staff has conflicts
+                const hasConflict = staffConflicts.some(c => c.staff_id === item.staff_id);
+                
+                return (
                 <div key={index} className="grid gap-4 md:grid-cols-3 border-b pb-4 last:border-0">
                   <div className="space-y-2">
                     <Label>Service *</Label>
@@ -504,12 +671,16 @@ export default function NewBookingPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Staff *</Label>
+                    <Label className={hasConflict ? 'text-red-600' : ''}>
+                      Staff * {hasConflict && '⚠️ Conflict'}
+                    </Label>
                     <select
                       value={item.staff_id}
                       onChange={(e) => updateBookingItem(index, 'staff_id', e.target.value)}
                       required
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className={`flex h-10 w-full rounded-md border ${
+                        hasConflict ? 'border-red-500 bg-red-50' : 'border-input bg-background'
+                      } px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50`}
                     >
                       <option value="">Select Staff</option>
                       {staff.map((staffMember) => (
@@ -518,6 +689,11 @@ export default function NewBookingPage() {
                         </option>
                       ))}
                     </select>
+                    {hasConflict && (
+                      <p className="text-xs text-red-600 font-medium">
+                        This staff member has conflicting bookings
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2 flex items-end">
@@ -532,7 +708,8 @@ export default function NewBookingPage() {
                     </Button>
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </CardContent>
           </Card>
 
@@ -543,8 +720,12 @@ export default function NewBookingPage() {
                 Cancel
               </Button>
             </Link>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Booking'}
+            <Button 
+              type="submit" 
+              disabled={loading || (showConflictWarning && !proceedWithConflicts)}
+              className={showConflictWarning && proceedWithConflicts ? 'bg-red-600 hover:bg-red-700' : ''}
+            >
+              {loading ? 'Creating...' : showConflictWarning && proceedWithConflicts ? '⚠️ Create Anyway' : 'Create Booking'}
             </Button>
           </div>
         </div>
