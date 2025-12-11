@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendBroadcastMessage } from '@/lib/whatsapp/client';
+import { getTenantWhatsAppCredentials } from '@/lib/whatsapp/server';
 
 /**
  * POST /api/broadcasts/send
@@ -113,6 +114,7 @@ export async function POST(request: NextRequest) {
       .eq('id', broadcast.id);
 
     // Send messages asynchronously (don't wait for completion)
+    const credentials = await getTenantWhatsAppCredentials(tenantId);
     sendBroadcastMessagesAsync(
       supabase,
       broadcast.id,
@@ -120,7 +122,8 @@ export async function POST(request: NextRequest) {
       clients,
       title,
       message,
-      image_url
+      image_url,
+      credentials
     );
 
     return NextResponse.json({
@@ -148,7 +151,8 @@ async function sendBroadcastMessagesAsync(
   clients: any[],
   title: string,
   message: string,
-  imageUrl?: string
+  imageUrl?: string,
+  credentials?: { phoneNumberId: string; accessToken: string } | null
 ) {
   let sentCount = 0;
   let failedCount = 0;
@@ -184,7 +188,7 @@ async function sendBroadcastMessagesAsync(
         title,
         message,
         imageUrl: imageUrl || undefined,
-      });
+      }, credentials || undefined);
 
       if (result && result.messages && result.messages.length > 0) {
         sentCount++;

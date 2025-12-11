@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sendTextMessage } from '@/lib/whatsapp/client';
+import { getTenantWhatsAppCredentials } from '@/lib/whatsapp/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { to, message } = await request.json();
+    const { to, message, tenantId } = await request.json();
 
     if (!to || !message) {
       return NextResponse.json(
@@ -12,7 +13,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await sendTextMessage(to, message);
+    const credentials = tenantId ? await getTenantWhatsAppCredentials(tenantId) : null;
+    await sendTextMessage(to, message, credentials || undefined);
 
     return NextResponse.json({ success: true });
   } catch (error) {

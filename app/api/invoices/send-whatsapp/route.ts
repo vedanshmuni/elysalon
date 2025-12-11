@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendTextMessage, sendWhatsAppMessage } from '@/lib/whatsapp/client';
+import { getTenantWhatsAppCredentials } from '@/lib/whatsapp/server';
 import { generateInvoicePDF } from '../generate-pdf/route';
 
 export async function POST(request: NextRequest) {
@@ -23,7 +24,8 @@ export async function POST(request: NextRequest) {
           phone,
           email
         ),
-        invoice_items (*)
+        invoice_items (*),
+        tenant_id
       `)
       .eq('id', invoiceId)
       .single();
@@ -71,6 +73,9 @@ export async function POST(request: NextRequest) {
       `Thank you for your business! 🙏\n` +
       `We look forward to serving you again! 💇✨`;
 
+    // Get tenant-specific WhatsApp credentials
+    const credentials = await getTenantWhatsAppCredentials(invoice.tenant_id);
+
     // Send single message with PDF attached and full invoice details as caption
     await sendWhatsAppMessage({
       to: client.phone,
@@ -80,7 +85,7 @@ export async function POST(request: NextRequest) {
         filename: `Invoice_${invoice.invoice_number}.pdf`,
         caption: caption
       }
-    });
+    }, credentials || undefined);
 
     // Update invoice to mark as sent
     await supabase

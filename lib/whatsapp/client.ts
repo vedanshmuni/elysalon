@@ -4,8 +4,6 @@
  * Supports multi-tenant with different WhatsApp numbers per tenant
  */
 
-import { createServiceRoleClient } from '@/lib/supabase/server';
-
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
 
 // Fallback to environment variables for backward compatibility
@@ -32,82 +30,30 @@ interface WhatsAppMessage {
   };
 }
 
-interface WhatsAppCredentials {
+export interface WhatsAppCredentials {
   phoneNumberId: string;
   accessToken: string;
 }
 
-/**
- * Get WhatsApp credentials for a specific tenant
- */
-export async function getTenantWhatsAppCredentials(tenantId: string): Promise<WhatsAppCredentials | null> {
-  try {
-    const supabase = createServiceRoleClient();
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('whatsapp_phone_number_id, whatsapp_access_token')
-      .eq('id', tenantId)
-      .single();
+export async function sendWhatsAppMessage(message: WhatsAppMessage, credentials?: WhatsAppCredentials) {
+  // Use provided credentials or fallback to environment variables
+  const creds = credentials || (DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN ? {
+    phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
+    accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
+  } : null);
 
-    if (tenant?.whatsapp_phone_number_id && tenant?.whatsapp_access_token) {
-      return {
-        phoneNumberId: tenant.whatsapp_phone_number_id,
-        accessToken: tenant.whatsapp_access_token
-      };
-    }
-
-    // Fallback to environment variables
-    if (DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN) {
-      return {
-        phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
-        accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
-      };
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error fetching tenant WhatsApp credentials:', error);
-    
-    // Fallback to environment variables
-    if (DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN) {
-      return {
-        phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
-        accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
-      };
-    }
-    
-    return null;
-  }
-}
-
-export async function sendWhatsAppMessage(message: WhatsAppMessage, tenantId?: string) {
-  let credentials: WhatsAppCredentials | null = null;
-
-  // Get tenant-specific credentials if tenantId provided
-  if (tenantId) {
-    credentials = await getTenantWhatsAppCredentials(tenantId);
-  }
-
-  // Fallback to environment variables
-  if (!credentials && DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN) {
-    credentials = {
-      phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
-      accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
-    };
-  }
-
-  if (!credentials) {
+  if (!creds) {
     console.error('WhatsApp credentials not configured');
     throw new Error('WhatsApp integration not configured. Please set credentials in tenant settings or environment variables.');
   }
 
   try {
     const response = await fetch(
-      `${WHATSAPP_API_URL}/${credentials.phoneNumberId}/messages`,
+      `${WHATSAPP_API_URL}/${creds.phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${credentials.accessToken}`,
+          'Authorization': `Bearer ${creds.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -133,7 +79,7 @@ export async function sendWhatsAppMessage(message: WhatsAppMessage, tenantId?: s
 /**
  * Send text message via WhatsApp
  */
-export async function sendTextMessage(phoneNumber: string, message: string, tenantId?: string) {
+export async function sendTextMessage(phoneNumber: string, message: string, credentials?: WhatsAppCredentials) {
   // Remove any non-digit characters and ensure proper format
   const cleanPhone = phoneNumber.replace(/\D/g, '');
   
@@ -143,7 +89,7 @@ export async function sendTextMessage(phoneNumber: string, message: string, tena
     text: {
       body: message,
     },
-  }, tenantId);
+  }, credentials);
 }
 
 /**
@@ -270,7 +216,8 @@ export async function sendBroadcastMessage(
     title: string;
     message: string;
     imageUrl?: string;
-  }
+  },
+  credentials?: WhatsAppCredentials
 ) {
   const cleanPhone = phoneNumber.replace(/\D/g, '');
   const fullMessage = `${broadcastDetails.title}\n\n${broadcastDetails.message}`;
@@ -280,18 +227,21 @@ export async function sendBroadcastMessage(
     try {
       const cleanPhone = phoneNumber.replace(/\D/g, '');
 
-      if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+      const phoneNumberId = credentials?.phoneNumberId || DEFAULT_WHATSAPP_PHONE_NUMBER_ID;
+      const accessToken = credentials?.accessToken || DEFAULT_WHATSAPP_ACCESS_TOKEN;
+
+      if (!phoneNumberId || !accessToken) {
         console.error('WhatsApp credentials not configured');
         throw new Error('WhatsApp integration not configured');
       }
 
       // Send image with caption
       const response = await fetch(
-        `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+            'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -317,12 +267,12 @@ export async function sendBroadcastMessage(
     } catch (error) {
       console.error('Error sending broadcast with image:', error);
       // Fallback to text-only if image fails
-      return sendTextMessage(cleanPhone, fullMessage);
+      return sendTextMessage(cleanPhone, fullMessage, credentials);
     }
   }
 
   // Send text-only message
-  return sendTextMessage(cleanPhone, fullMessage);
+  return sendTextMessage(cleanPhone, fullMessage, credentials);
 }
 
 /**
@@ -336,24 +286,17 @@ export async function sendInteractiveButtons(
     footerText?: string;
     buttons: Array<{ id: string; title: string }>;
   },
-  tenantId?: string
+  credentials?: WhatsAppCredentials
 ) {
   const cleanPhone = phoneNumber.replace(/\D/g, '');
 
-  // Get tenant-specific or default credentials
-  let credentials: WhatsAppCredentials | null = null;
-  if (tenantId) {
-    credentials = await getTenantWhatsAppCredentials(tenantId);
-  }
-  
-  if (!credentials && DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN) {
-    credentials = {
-      phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
-      accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
-    };
-  }
+  // Use provided credentials or default
+  const creds = credentials || (DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN ? {
+    phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
+    accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
+  } : null);
 
-  if (!credentials) {
+  if (!creds) {
     throw new Error('WhatsApp integration not configured');
   }
 
@@ -394,11 +337,11 @@ export async function sendInteractiveButtons(
 
   try {
     const response = await fetch(
-      `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      `${WHATSAPP_API_URL}/${creds.phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Authorization': `Bearer ${creds.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
@@ -437,24 +380,17 @@ export async function sendInteractiveList(
       }>;
     }>;
   },
-  tenantId?: string
+  credentials?: WhatsAppCredentials
 ) {
   const cleanPhone = phoneNumber.replace(/\D/g, '');
 
-  // Get tenant-specific or default credentials
-  let credentials: WhatsAppCredentials | null = null;
-  if (tenantId) {
-    credentials = await getTenantWhatsAppCredentials(tenantId);
-  }
-  
-  if (!credentials && DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN) {
-    credentials = {
-      phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
-      accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
-    };
-  }
+  // Use provided credentials or default
+  const creds = credentials || (DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN ? {
+    phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
+    accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
+  } : null);
 
-  if (!credentials) {
+  if (!creds) {
     throw new Error('WhatsApp integration not configured');
   }
 
@@ -497,11 +433,11 @@ export async function sendInteractiveList(
 
   try {
     const response = await fetch(
-      `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      `${WHATSAPP_API_URL}/${creds.phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Authorization': `Bearer ${creds.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
@@ -527,22 +463,26 @@ export async function sendInteractiveList(
 export async function sendOfferTemplate(
   phoneNumber: string,
   templateName: string,
-  parameters: string[]
+  parameters: string[],
+  credentials?: WhatsAppCredentials
 ) {
   const cleanPhone = phoneNumber.replace(/\D/g, '');
 
-  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+  const phoneNumberId = credentials?.phoneNumberId || DEFAULT_WHATSAPP_PHONE_NUMBER_ID;
+  const accessToken = credentials?.accessToken || DEFAULT_WHATSAPP_ACCESS_TOKEN;
+
+  if (!phoneNumberId || !accessToken) {
     console.error('WhatsApp credentials not configured');
     throw new Error('WhatsApp integration not configured');
   }
 
   try {
     const response = await fetch(
-      `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      `${WHATSAPP_API_URL}/${phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

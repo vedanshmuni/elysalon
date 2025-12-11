@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getTenantWhatsAppCredentials } from '@/lib/whatsapp/server';
 
 /**
  * Cron job to send booking reminders 2 hours before appointment
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
         id,
         scheduled_start,
         reminder_sent,
+        tenant_id,
         client:clients (
           id,
           full_name,
@@ -117,7 +119,8 @@ export async function GET(request: NextRequest) {
 
         // Use sendTextMessage directly with custom message
         const { sendTextMessage } = await import('@/lib/whatsapp/client');
-        await sendTextMessage(booking.client.phone, reminderMessage);
+        const credentials = await getTenantWhatsAppCredentials(booking.tenant_id);
+        await sendTextMessage(booking.client.phone, reminderMessage, credentials || undefined);
 
         // Update booking to mark reminder as sent
         await supabase

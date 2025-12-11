@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { sendTextMessage, sendInteractiveButtons, sendInteractiveList } from '@/lib/whatsapp/client';
+import { getTenantWhatsAppCredentials } from '@/lib/whatsapp/server';
 
 // Default tenant ID from environment variable (simpler approach like elychat)
 const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID;
@@ -145,6 +146,12 @@ export async function POST(request: NextRequest) {
     
     console.log('🏢 Using tenant ID:', tenantId);
 
+    // Get WhatsApp credentials for this tenant
+    const credentials = await getTenantWhatsAppCredentials(tenantId);
+
+    // Store credentials globally for this request (simplified approach)
+    (global as any).__whatsapp_credentials = credentials;
+
     // Handle different message types
     if (messageType === 'text') {
       const messageBody = message.text?.body || '';
@@ -264,6 +271,8 @@ async function sendWelcomeMenu(from: string, profileName: string, tenantId: stri
 
     const salonName = tenant?.name || 'our salon';
 
+    const credentials = (global as any).__whatsapp_credentials;
+    
     await sendInteractiveButtons(from, {
       headerText: `Welcome to ${salonName}! 👋`,
       bodyText: `Hi ${profileName}! How can we help you today?\n\nTap a button below to get started:`,
@@ -273,7 +282,7 @@ async function sendWelcomeMenu(from: string, profileName: string, tenantId: stri
         { id: 'contact_us', title: '📞 Contact Us' }
       ],
       footerText: 'We look forward to serving you!'
-    }, tenantId);
+    }, credentials);
 
     console.log('✅ Welcome menu sent to', from);
   } catch (error) {
