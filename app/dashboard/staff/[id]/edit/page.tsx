@@ -61,14 +61,27 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
     const tenantId = profile?.default_tenant_id;
     if (!tenantId) return;
 
-    // Load staff
+    // Load staff (without users join that causes 400 error)
     const { data: staffData } = await supabase
       .from('staff')
-      .select('*, users:user_id(email)')
+      .select('*')
       .eq('id', id)
       .single();
 
     if (staffData) {
+      // If staff has user_id, fetch email from profiles
+      if (staffData.user_id) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('id', staffData.user_id)
+          .single();
+        
+        if (profileData) {
+          staffData.user_email = profileData.email;
+        }
+      }
+
       setStaff(staffData);
       setFormData({
         display_name: staffData.display_name || '',
@@ -272,7 +285,7 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
           </CardHeader>
           <CardContent>
             <p className="text-sm text-green-700">
-              This staff member is linked to: <strong>{staff.users?.email || 'Unknown email'}</strong>
+              This staff member is linked to: <strong>{staff.user_email || 'Unknown email'}</strong>
             </p>
           </CardContent>
         </Card>
@@ -336,7 +349,7 @@ export default function EditStaffPage({ params }: { params: Promise<{ id: string
 
                 <div className="space-y-2">
                   <Label>Email (Read-only)</Label>
-                  <Input value={staff.users?.email || 'Not linked'} disabled />
+                  <Input value={staff.user_email || 'Not linked'} disabled />
                 </div>
               </div>
 
