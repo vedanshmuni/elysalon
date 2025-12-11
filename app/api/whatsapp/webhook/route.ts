@@ -129,15 +129,21 @@ export async function POST(request: NextRequest) {
     const messageType = message.type;
     const profileName = value.contacts?.[0]?.profile?.name || 'Customer';
     
+    // Extract WhatsApp phone number ID from metadata
+    const phoneNumberId = value.metadata?.phone_number_id;
+    
     console.log('📱 Message from:', from, '| Profile name:', profileName);
+    console.log('📞 Received on WhatsApp number ID:', phoneNumberId);
 
-    // Get tenant ID - use env variable or fetch from database
-    const tenantId = await getTenantId();
+    // Get tenant ID based on which WhatsApp number received the message
+    const tenantId = await getTenantId(phoneNumberId);
     
     if (!tenantId) {
-      console.error('❌ No tenant configured');
+      console.error('❌ No tenant configured for phone number ID:', phoneNumberId);
       return NextResponse.json({ status: 'received' }, { status: 200 });
     }
+    
+    console.log('🏢 Using tenant ID:', tenantId);
 
     // Handle different message types
     if (messageType === 'text') {
@@ -167,15 +173,38 @@ export async function POST(request: NextRequest) {
 /**
  * Get tenant ID - from env variable or first tenant in database
  */
-async function getTenantId(): Promise<string | null> {
-  // First try environment variable (fastest, most reliable)
+/**
+ * Get tenant ID based on WhatsApp phone number that received the message
+ */
+async function getTenantId(phoneNumberId?: string): Promise<string | null> {
+  const supabase = createServiceRoleClient();
+
+  // If we have phone number ID from webhook, lookup tenant by it
+  if (phoneNumberId) {
+    try {
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('whatsapp_phone_number_id', phoneNumberId)
+        .single();
+      
+      if (tenant) {
+        console.log('📍 Found tenant by WhatsApp phone number ID:', tenant.id);
+        return tenant.id;
+      }
+    } catch (error) {
+      console.log('No tenant found for phone number ID:', phoneNumberId);
+    }
+  }
+
+  // First fallback: try environment variable
   if (DEFAULT_TENANT_ID) {
+    console.log('📍 Using DEFAULT_TENANT_ID from env:', DEFAULT_TENANT_ID);
     return DEFAULT_TENANT_ID;
   }
 
-  // Fallback: get first tenant from database
+  // Final fallback: get first tenant from database
   try {
-    const supabase = createServiceRoleClient();
     const { data: tenant } = await supabase
       .from('tenants')
       .select('id')
@@ -184,7 +213,7 @@ async function getTenantId(): Promise<string | null> {
       .single();
     
     if (tenant) {
-      console.log('📍 Found tenant from database:', tenant.id);
+      console.log('📍 Using first tenant from database:', tenant.id);
       return tenant.id;
     }
   } catch (error) {
@@ -244,7 +273,7 @@ async function sendWelcomeMenu(from: string, profileName: string, tenantId: stri
         { id: 'contact_us', title: '📞 Contact Us' }
       ],
       footerText: 'We look forward to serving you!'
-    });
+    }, tenantId);
 
     console.log('✅ Welcome menu sent to', from);
   } catch (error) {

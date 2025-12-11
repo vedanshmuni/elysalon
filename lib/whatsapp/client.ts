@@ -1,11 +1,16 @@
 /**
  * WhatsApp Business API Client
  * Uses WhatsApp Cloud API (Meta)
+ * Supports multi-tenant with different WhatsApp numbers per tenant
  */
 
+import { createServiceRoleClient } from '@/lib/supabase/server';
+
 const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
-const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
+
+// Fallback to environment variables for backward compatibility
+const DEFAULT_WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const DEFAULT_WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
 
 interface WhatsAppMessage {
   to: string;
@@ -27,19 +32,82 @@ interface WhatsAppMessage {
   };
 }
 
-export async function sendWhatsAppMessage(message: WhatsAppMessage) {
-  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+interface WhatsAppCredentials {
+  phoneNumberId: string;
+  accessToken: string;
+}
+
+/**
+ * Get WhatsApp credentials for a specific tenant
+ */
+export async function getTenantWhatsAppCredentials(tenantId: string): Promise<WhatsAppCredentials | null> {
+  try {
+    const supabase = createServiceRoleClient();
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('whatsapp_phone_number_id, whatsapp_access_token')
+      .eq('id', tenantId)
+      .single();
+
+    if (tenant?.whatsapp_phone_number_id && tenant?.whatsapp_access_token) {
+      return {
+        phoneNumberId: tenant.whatsapp_phone_number_id,
+        accessToken: tenant.whatsapp_access_token
+      };
+    }
+
+    // Fallback to environment variables
+    if (DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN) {
+      return {
+        phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
+        accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error fetching tenant WhatsApp credentials:', error);
+    
+    // Fallback to environment variables
+    if (DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN) {
+      return {
+        phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
+        accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
+      };
+    }
+    
+    return null;
+  }
+}
+
+export async function sendWhatsAppMessage(message: WhatsAppMessage, tenantId?: string) {
+  let credentials: WhatsAppCredentials | null = null;
+
+  // Get tenant-specific credentials if tenantId provided
+  if (tenantId) {
+    credentials = await getTenantWhatsAppCredentials(tenantId);
+  }
+
+  // Fallback to environment variables
+  if (!credentials && DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN) {
+    credentials = {
+      phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
+      accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
+    };
+  }
+
+  if (!credentials) {
     console.error('WhatsApp credentials not configured');
-    throw new Error('WhatsApp integration not configured. Please set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN in environment variables.');
+    throw new Error('WhatsApp integration not configured. Please set credentials in tenant settings or environment variables.');
   }
 
   try {
     const response = await fetch(
-      `${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      `${WHATSAPP_API_URL}/${credentials.phoneNumberId}/messages`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+          'Authorization': `Bearer ${credentials.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -65,7 +133,7 @@ export async function sendWhatsAppMessage(message: WhatsAppMessage) {
 /**
  * Send text message via WhatsApp
  */
-export async function sendTextMessage(phoneNumber: string, message: string) {
+export async function sendTextMessage(phoneNumber: string, message: string, tenantId?: string) {
   // Remove any non-digit characters and ensure proper format
   const cleanPhone = phoneNumber.replace(/\D/g, '');
   
@@ -75,7 +143,7 @@ export async function sendTextMessage(phoneNumber: string, message: string) {
     text: {
       body: message,
     },
-  });
+  }, tenantId);
 }
 
 /**
@@ -267,11 +335,25 @@ export async function sendInteractiveButtons(
     bodyText: string;
     footerText?: string;
     buttons: Array<{ id: string; title: string }>;
-  }
+  },
+  tenantId?: string
 ) {
   const cleanPhone = phoneNumber.replace(/\D/g, '');
 
-  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+  // Get tenant-specific or default credentials
+  let credentials: WhatsAppCredentials | null = null;
+  if (tenantId) {
+    credentials = await getTenantWhatsAppCredentials(tenantId);
+  }
+  
+  if (!credentials && DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN) {
+    credentials = {
+      phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
+      accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
+    };
+  }
+
+  if (!credentials) {
     throw new Error('WhatsApp integration not configured');
   }
 
@@ -354,11 +436,25 @@ export async function sendInteractiveList(
         description?: string;
       }>;
     }>;
-  }
+  },
+  tenantId?: string
 ) {
   const cleanPhone = phoneNumber.replace(/\D/g, '');
 
-  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN) {
+  // Get tenant-specific or default credentials
+  let credentials: WhatsAppCredentials | null = null;
+  if (tenantId) {
+    credentials = await getTenantWhatsAppCredentials(tenantId);
+  }
+  
+  if (!credentials && DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN) {
+    credentials = {
+      phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
+      accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
+    };
+  }
+
+  if (!credentials) {
     throw new Error('WhatsApp integration not configured');
   }
 
