@@ -36,16 +36,12 @@ export interface WhatsAppCredentials {
 }
 
 export async function sendWhatsAppMessage(message: WhatsAppMessage, credentials?: WhatsAppCredentials) {
-  // Use provided credentials or fallback to environment variables
-  const creds = credentials || (DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN ? {
-    phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
-    accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
-  } : null);
-
-  if (!creds) {
-    console.error('WhatsApp credentials not configured');
-    throw new Error('WhatsApp integration not configured. Please set credentials in tenant settings or environment variables.');
+  if (!credentials) {
+    console.error('WhatsApp credentials not provided');
+    throw new Error('WhatsApp credentials not configured for this tenant. Please configure in Settings > Tenant Settings.');
   }
+
+  const creds = credentials;
 
   try {
     const response = await fetch(
@@ -290,15 +286,11 @@ export async function sendInteractiveButtons(
 ) {
   const cleanPhone = phoneNumber.replace(/\D/g, '');
 
-  // Use provided credentials or default
-  const creds = credentials || (DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN ? {
-    phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
-    accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
-  } : null);
-
-  if (!creds) {
-    throw new Error('WhatsApp integration not configured');
+  if (!credentials) {
+    throw new Error('WhatsApp credentials not configured for this tenant');
   }
+
+  const creds = credentials;
 
   const payload: any = {
     messaging_product: 'whatsapp',
@@ -384,15 +376,11 @@ export async function sendInteractiveList(
 ) {
   const cleanPhone = phoneNumber.replace(/\D/g, '');
 
-  // Use provided credentials or default
-  const creds = credentials || (DEFAULT_WHATSAPP_PHONE_NUMBER_ID && DEFAULT_WHATSAPP_ACCESS_TOKEN ? {
-    phoneNumberId: DEFAULT_WHATSAPP_PHONE_NUMBER_ID,
-    accessToken: DEFAULT_WHATSAPP_ACCESS_TOKEN
-  } : null);
-
-  if (!creds) {
-    throw new Error('WhatsApp integration not configured');
+  if (!credentials) {
+    throw new Error('WhatsApp credentials not configured for this tenant');
   }
+
+  const creds = credentials;
 
   const payload: any = {
     messaging_product: 'whatsapp',
