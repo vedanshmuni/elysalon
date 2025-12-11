@@ -32,18 +32,30 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
   async function loadData() {
     const supabase = createClient();
 
-    // Load staff details
+    // Load staff details (without inner join that excludes staff without accounts)
     const { data: staffData } = await supabase
       .from('staff')
       .select(
         `
         *,
-        branch:branches(name),
-        user:auth.users!inner(email)
+        branch:branches(name)
       `
       )
       .eq('id', id)
       .single();
+
+    // If staff has user_id, fetch the user email separately
+    if (staffData?.user_id) {
+      const { data: userData } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('id', staffData.user_id)
+        .single();
+      
+      if (userData) {
+        staffData.user_email = userData.email;
+      }
+    }
 
     setStaff(staffData);
 
@@ -149,8 +161,8 @@ export default function StaffDetailPage({ params }: { params: Promise<{ id: stri
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <p className="text-sm text-muted-foreground">Email</p>
-              <p className="font-medium">{staff.user?.email}</p>
+              <p className="text-sm text-muted-foreground">Email / Phone</p>
+              <p className="font-medium">{staff.user_email || staff.phone || 'No account linked'}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Branch</p>
