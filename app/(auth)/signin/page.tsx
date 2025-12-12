@@ -32,6 +32,16 @@ export default function SignInPage() {
       setError(error.message);
       setLoading(false);
     } else if (data.user) {
+      // Check if user needs to change password (first-time login after payment)
+      const passwordChanged = data.user.user_metadata?.password_changed;
+      
+      if (passwordChanged === false) {
+        // First-time login - redirect to change password page
+        router.push('/change-password');
+        router.refresh();
+        return;
+      }
+
       // Check if user has completed onboarding
       const { data: profile } = await supabase
         .from('profiles')
