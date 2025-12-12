@@ -1,16 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { CheckCircle2 } from 'lucide-react';
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const planCode = searchParams.get('plan') || 'TRIAL';
+  const isVerified = searchParams.get('verified') === 'true';
+
   const [salonName, setSalonName] = useState('');
   const [branchName, setBranchName] = useState('');
   const [phone, setPhone] = useState('');
@@ -89,6 +95,7 @@ export default function OnboardingPage() {
         p_phone: phone,
         p_address: address,
         p_user_full_name: fullName,
+        p_plan_code: planCode,
       });
 
       if (error) {
@@ -128,7 +135,15 @@ export default function OnboardingPage() {
     <div className="flex items-center justify-center min-h-screen p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold">Welcome to SalonOS</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-2xl font-bold">Welcome to SalonOS</CardTitle>
+            {isVerified && (
+              <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100">
+                <CheckCircle2 className="w-3 h-3 mr-1" />
+                {planCode} Plan
+              </Badge>
+            )}
+          </div>
           <CardDescription>Let's set up your salon business</CardDescription>
         </CardHeader>
         <CardContent>
