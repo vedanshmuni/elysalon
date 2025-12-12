@@ -14,7 +14,6 @@ import { CheckCircle2 } from 'lucide-react';
 function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const planCode = searchParams.get('plan') || 'TRIAL';
   const isVerified = searchParams.get('verified') === 'true';
 
   const [salonName, setSalonName] = useState('');
@@ -24,6 +23,7 @@ function OnboardingContent() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
 
   useEffect(() => {
     checkUser();
@@ -48,6 +48,29 @@ function OnboardingContent() {
     if (profile?.default_tenant_id) {
       router.push('/dashboard');
       return;
+    }
+
+    // Check for active subscription
+    const { data: subscriptions, error: subError } = await supabase
+      .from('user_subscriptions')
+      .select('id, plan_code, status, user_id')
+      .or(`user_id.eq.${user.id},email.eq.${user.email}`)
+      .in('status', ['authenticated', 'active', 'cancelled'])
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (subscriptions && subscriptions.length > 0) {
+      const subscription = subscriptions[0];
+      setSubscriptionPlan(subscription.plan_code);
+      // Link subscription to user if not already linked
+      if (!subscription.user_id) {
+        await supabase
+          .from('user_subscriptions')
+          .update({ user_id: user.id })
+          .eq('id', subscription.id);
+      }
+    } else {
+      setError('No active subscription found. Please subscribe to a plan first.');
     }
 
     setChecking(false);
@@ -87,15 +110,19 @@ function OnboardingContent() {
       // Get user's full name
       const fullName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Owner';
 
+      // Get plan from subscription (function will use it from subscription table)
+      const planCode = subscriptionPlan || 'TRIAL';
+
       // Call the database function to complete onboarding
       // This bypasses RLS and creates all records atomically
+      // The function will get the plan from user_subscriptions table
       const { data, error } = await supabase.rpc('complete_onboarding', {
         p_salon_name: salonName,
         p_branch_name: branchName || 'Main Branch',
         p_phone: phone,
         p_address: address,
         p_user_full_name: fullName,
-        p_plan_code: planCode,
+        p_plan_code: planCode,  // This is just for backward compatibility, function uses subscription
       });
 
       if (error) {
@@ -137,10 +164,10 @@ function OnboardingContent() {
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-between">
             <CardTitle className="text-2xl font-bold">Welcome to SalonOS</CardTitle>
-            {isVerified && (
+            {subscriptionPlan && (
               <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100">
                 <CheckCircle2 className="w-3 h-3 mr-1" />
-                {planCode} Plan
+                {subscriptionPlan} Plan
               </Badge>
             )}
           </div>
