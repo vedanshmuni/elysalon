@@ -51,13 +51,19 @@ function OnboardingContent() {
     }
 
     // Check for active subscription
+    // Normalize email for comparison
+    const normalizedEmail = user.email?.toLowerCase().trim();
     const { data: subscriptions, error: subError } = await supabase
       .from('user_subscriptions')
-      .select('id, plan_code, status, user_id')
-      .or(`user_id.eq.${user.id},email.eq.${user.email}`)
-      .in('status', ['authenticated', 'active', 'cancelled'])
+      .select('id, plan_code, status, user_id, email')
+      .or(`user_id.eq.${user.id},email.ilike.${normalizedEmail}`)
+      .in('status', ['authenticated', 'active', 'cancelled', 'created'])
       .order('created_at', { ascending: false })
       .limit(1);
+    
+    if (subError) {
+      console.error('Error fetching subscription:', subError);
+    }
 
     if (subscriptions && subscriptions.length > 0) {
       const subscription = subscriptions[0];

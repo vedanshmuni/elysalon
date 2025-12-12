@@ -41,13 +41,14 @@ BEGIN
 
     -- SECURITY CHECK: Look for an active subscription for this user
     -- Check both by user_id (if linked) and email (if not yet linked)
+    -- Normalize email for comparison
     SELECT * INTO v_subscription_record
     FROM public.user_subscriptions
     WHERE (
         (user_id = v_user_id AND user_id IS NOT NULL)
-        OR (email = v_user_email AND user_id IS NULL)
+        OR (LOWER(TRIM(email)) = LOWER(TRIM(v_user_email)) AND user_id IS NULL)
     )
-    AND status IN ('authenticated', 'active', 'cancelled')  -- Allow cancelled (still has access)
+    AND status IN ('authenticated', 'active', 'cancelled', 'created')  -- Allow all non-expired statuses
     AND (current_period_end IS NULL OR current_period_end > NOW())  -- Not expired
     ORDER BY created_at DESC
     LIMIT 1;
