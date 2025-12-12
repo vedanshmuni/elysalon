@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,10 +19,11 @@ import { useSearchParams } from 'next/navigation';
 import { formatDate } from '@/lib/utils/date';
 import { formatCurrency } from '@/lib/utils/currency';
 
-export default function POSHistoryPage() {
+function POSHistoryContent() {
   const searchParams = useSearchParams();
   const invoiceId = searchParams.get('invoice');
   const autoPrint = searchParams.get('print') === 'true';
+  
   async function generateInvoicePDF(invoice: any) {
     const supabase = createClient();
     
@@ -182,6 +183,7 @@ export default function POSHistoryPage() {
     printWindow.document.write(invoiceHTML);
     printWindow.document.close();
   }
+
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -249,7 +251,6 @@ export default function POSHistoryPage() {
       startDate: thirtyDaysAgo.toISOString().split('T')[0],
       endDate: today.toISOString().split('T')[0],
       paymentMethod: '',
-      staffId: '',
     });
 
     setLoading(false);
@@ -485,5 +486,39 @@ export default function POSHistoryPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function POSHistoryLoading() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <div className="h-10 w-10 bg-muted rounded animate-pulse" />
+        <div>
+          <div className="h-8 w-48 bg-muted rounded animate-pulse mb-2" />
+          <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+        </div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        {[1, 2, 3].map((i) => (
+          <Card key={i}>
+            <CardContent className="pt-6">
+              <div className="h-8 w-24 bg-muted rounded animate-pulse mb-2" />
+              <div className="h-4 w-16 bg-muted rounded animate-pulse" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Main page component with Suspense boundary
+export default function POSHistoryPage() {
+  return (
+    <Suspense fallback={<POSHistoryLoading />}>
+      <POSHistoryContent />
+    </Suspense>
   );
 }

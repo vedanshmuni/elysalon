@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2 } from 'lucide-react';
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const planCode = searchParams.get('plan') || 'TRIAL';
@@ -202,5 +202,27 @@ export default function OnboardingPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function OnboardingLoading() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <Card className="w-full max-w-md">
+        <CardContent className="pt-6">
+          <p className="text-center text-muted-foreground">Loading...</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// Main page component with Suspense boundary
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<OnboardingLoading />}>
+      <OnboardingContent />
+    </Suspense>
   );
 }
